@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WhatsApp Evidence Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Termux Evidence Server</p>
+          <h1>WhatsApp Webhook Dashboard</h1>
+          <p class="subtle">Lightweight Flask + SQLite capture dashboard for Meta WhatsApp Cloud API webhooks.</p>
+        </div>
+        <div class="actions">
+          <a href="/messages">Messages</a>
+          <a href="/api/stats">Stats JSON</a>
+          <a href="/export/messages.csv">Export CSV</a>
+        </div>
+      </section>
+
+      <section class="cards">
+        <article><span>Total messages</span><strong>{{ stats.total_messages }}</strong></article>
+        <article><span>Messages today</span><strong>{{ stats.messages_today }}</strong></article>
+        <article><span>Text</span><strong>{{ stats.text_count }}</strong></article>
+        <article><span>Images</span><strong>{{ stats.image_count }}</strong></article>
+        <article><span>Audio</span><strong>{{ stats.audio_count }}</strong></article>
+        <article><span>Video</span><strong>{{ stats.video_count }}</strong></article>
+        <article><span>Documents</span><strong>{{ stats.document_count }}</strong></article>
+        <article><span>Unknown</span><strong>{{ stats.unknown_count }}</strong></article>
+      </section>
+
+      <section class="grid two">
+        <article class="panel">
+          <h2>Last activity</h2>
+          <dl>
+            <dt>Last webhook received</dt>
+            <dd>{{ stats.last_webhook_received_time or "None yet" }}</dd>
+            <dt>Last message received</dt>
+            <dd>{{ stats.last_message_received_time or "None yet" }}</dd>
+          </dl>
+        </article>
+
+        <article class="panel">
+          <h2>Messages by type</h2>
+          <table>
+            <thead><tr><th>Type</th><th>Count</th></tr></thead>
+            <tbody>
+              {% for row in stats.messages_by_type %}
+              <tr><td>{{ row.message_type or "unknown" }}</td><td>{{ row.count }}</td></tr>
+              {% else %}
+              <tr><td colspan="2">No messages yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="grid two">
+        <article class="panel">
+          <h2>Messages by sender</h2>
+          <table>
+            <thead><tr><th>Sender</th><th>Count</th></tr></thead>
+            <tbody>
+              {% for row in stats.messages_by_sender %}
+              <tr><td>{{ row.sender }}</td><td>{{ row.count }}</td></tr>
+              {% else %}
+              <tr><td colspan="2">No senders yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel">
+          <h2>Messages by day</h2>
+          <table>
+            <thead><tr><th>Day</th><th>Count</th></tr></thead>
+            <tbody>
+              {% for row in stats.messages_by_day %}
+              <tr><td>{{ row.day or "unknown" }}</td><td>{{ row.count }}</td></tr>
+              {% else %}
+              <tr><td colspan="2">No days yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Last 20 messages</h2>
+          <a href="/messages">View all recent</a>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Timestamp</th>
+                <th>Sender</th>
+                <th>Type</th>
+                <th>Text</th>
+                <th>Media ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for message in messages %}
+              <tr>
+                <td>{{ message.id }}</td>
+                <td>{{ message.timestamp or message.created_at }}</td>
+                <td>{{ message.sender_name or message.sender_phone or "unknown" }}</td>
+                <td>{{ message.message_type }}</td>
+                <td class="clip">{{ message.text_body or message.media_caption or "" }}</td>
+                <td class="clip">{{ message.media_id or "" }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6">No messages captured yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

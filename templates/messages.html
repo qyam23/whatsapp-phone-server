@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Messages | WhatsApp Evidence Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero compact">
+        <div>
+          <p class="eyebrow">Recent records</p>
+          <h1>Messages</h1>
+        </div>
+        <div class="actions">
+          <a href="/dashboard">Dashboard</a>
+          <a href="/api/messages">JSON</a>
+          <a href="/export/messages.csv">Export CSV</a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Timestamp</th>
+                <th>Sender name</th>
+                <th>Sender phone</th>
+                <th>Type</th>
+                <th>Text body</th>
+                <th>Media ID</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for message in messages %}
+              <tr>
+                <td>{{ message.id }}</td>
+                <td>{{ message.timestamp or message.created_at }}</td>
+                <td>{{ message.sender_name or "" }}</td>
+                <td>{{ message.sender_phone or "" }}</td>
+                <td>{{ message.message_type }}</td>
+                <td class="clip">{{ message.text_body or message.media_caption or "" }}</td>
+                <td class="clip">{{ message.media_id or "" }}</td>
+                <td>{{ message.processing_status }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="8">No messages captured yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
