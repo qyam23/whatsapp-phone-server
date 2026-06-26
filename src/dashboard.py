@@ -9,7 +9,7 @@ dashboard_bp = Blueprint("dashboard", __name__)
 @dashboard_bp.get("/dashboard")
 def dashboard():
     stats = get_stats()
-    messages = list_messages(limit=20)
+    messages = list_messages(limit=50)
     return render_template("dashboard.html", stats=stats, messages=messages)
 
 

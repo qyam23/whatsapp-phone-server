@@ -12,7 +12,7 @@
         <div>
           <p class="eyebrow">Termux Evidence Server</p>
           <h1>WhatsApp Webhook Dashboard</h1>
-          <p class="subtle">Lightweight Flask + SQLite capture dashboard for Meta WhatsApp Cloud API webhooks.</p>
+          <p class="subtle">Lightweight Flask + SQLite capture dashboard for Meta Cloud API webhooks and optional Baileys companion ingestion.</p>
         </div>
         <div class="actions">
           <a href="/messages">Messages</a>
@@ -44,12 +44,12 @@
         </article>
 
         <article class="panel">
-          <h2>Messages by type</h2>
+          <h2>Messages by source</h2>
           <table>
-            <thead><tr><th>Type</th><th>Count</th></tr></thead>
+            <thead><tr><th>Source</th><th>Count</th></tr></thead>
             <tbody>
-              {% for row in stats.messages_by_type %}
-              <tr><td>{{ row.message_type or "unknown" }}</td><td>{{ row.count }}</td></tr>
+              {% for row in stats.messages_by_source %}
+              <tr><td>{{ row.source or "meta" }}</td><td>{{ row.count }}</td></tr>
               {% else %}
               <tr><td colspan="2">No messages yet</td></tr>
               {% endfor %}
@@ -60,6 +60,24 @@
 
       <section class="grid two">
         <article class="panel">
+          <h2>Messages by chat/group</h2>
+          <table>
+            <thead><tr><th>Chat</th><th>Kind</th><th>Count</th></tr></thead>
+            <tbody>
+              {% for row in stats.messages_by_chat %}
+              <tr>
+                <td>{{ row.chat }}</td>
+                <td>{{ "group" if row.is_group else "direct" }}</td>
+                <td>{{ row.count }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3">No chats yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel">
           <h2>Messages by sender</h2>
           <table>
             <thead><tr><th>Sender</th><th>Count</th></tr></thead>
@@ -68,6 +86,22 @@
               <tr><td>{{ row.sender }}</td><td>{{ row.count }}</td></tr>
               {% else %}
               <tr><td colspan="2">No senders yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="grid two">
+        <article class="panel">
+          <h2>Messages by type</h2>
+          <table>
+            <thead><tr><th>Type</th><th>Count</th></tr></thead>
+            <tbody>
+              {% for row in stats.messages_by_type %}
+              <tr><td>{{ row.message_type or "unknown" }}</td><td>{{ row.count }}</td></tr>
+              {% else %}
+              <tr><td colspan="2">No messages yet</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -90,7 +124,7 @@
 
       <section class="panel">
         <div class="panel-title">
-          <h2>Last 20 messages</h2>
+          <h2>Last 50 messages</h2>
           <a href="/messages">View all recent</a>
         </div>
         <div class="table-wrap">
@@ -98,25 +132,31 @@
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Source</th>
+                <th>Chat</th>
                 <th>Timestamp</th>
                 <th>Sender</th>
                 <th>Type</th>
                 <th>Text</th>
                 <th>Media ID</th>
+                <th>Media path</th>
               </tr>
             </thead>
             <tbody>
               {% for message in messages %}
               <tr>
                 <td>{{ message.id }}</td>
+                <td>{{ message.source or "meta" }}</td>
+                <td class="clip">{{ message.chat_name or message.chat_id or "" }}</td>
                 <td>{{ message.timestamp or message.created_at }}</td>
                 <td>{{ message.sender_name or message.sender_phone or "unknown" }}</td>
                 <td>{{ message.message_type }}</td>
                 <td class="clip">{{ message.text_body or message.media_caption or "" }}</td>
                 <td class="clip">{{ message.media_id or "" }}</td>
+                <td class="clip">{{ message.media_path or "" }}</td>
               </tr>
               {% else %}
-              <tr><td colspan="6">No messages captured yet</td></tr>
+              <tr><td colspan="9">No messages captured yet</td></tr>
               {% endfor %}
             </tbody>
           </table>

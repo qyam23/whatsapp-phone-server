@@ -8,3 +8,7 @@ data/*.db-*
 raw_events/**/*.json
 exports/*.csv
 exports/*.json
+companion_bridge/node_modules/
+companion_bridge/auth_info/
+companion_bridge/raw_events/
+companion_bridge/media/

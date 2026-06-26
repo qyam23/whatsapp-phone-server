@@ -2,7 +2,7 @@ from flask import Flask, jsonify, redirect, request, Response
 from dotenv import load_dotenv
 
 from src.dashboard import dashboard_bp
-from src.db import init_db, insert_message, insert_webhook_event, list_messages
+from src.db import init_db, insert_companion_message, insert_message, insert_webhook_event, list_messages
 from src.parser import parse_whatsapp_messages
 from src.storage import save_raw_event
 from src.utils import get_env, now_iso, rows_to_csv
@@ -56,6 +56,27 @@ def receive_webhook():
 
     for record in parse_whatsapp_messages(payload, raw_json_path):
         insert_message(record)
+
+    return jsonify({"status": "received"}), 200
+
+
+@app.post("/ingest/companion")
+def ingest_companion():
+    payload = request.get_json(silent=True) or {}
+    if payload.get("source") != "baileys":
+        return jsonify({"error": "source must be baileys"}), 400
+    if not payload.get("message_id"):
+        return jsonify({"error": "message_id is required"}), 400
+
+    raw_json_path = save_raw_event(payload, source="baileys")
+    payload["raw_payload_path"] = payload.get("raw_payload_path") or raw_json_path
+
+    insert_webhook_event(
+        event_type="baileys_companion_ingest",
+        raw_json_path=raw_json_path,
+        received_at=now_iso(),
+    )
+    insert_companion_message(payload)
 
     return jsonify({"status": "received"}), 200
 

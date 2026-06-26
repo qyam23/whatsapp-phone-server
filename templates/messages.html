@@ -26,12 +26,15 @@
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Source</th>
+                <th>Chat/group</th>
                 <th>Timestamp</th>
                 <th>Sender name</th>
                 <th>Sender phone</th>
                 <th>Type</th>
                 <th>Text body</th>
                 <th>Media ID</th>
+                <th>Media path</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -39,16 +42,19 @@
               {% for message in messages %}
               <tr>
                 <td>{{ message.id }}</td>
+                <td>{{ message.source or "meta" }}</td>
+                <td class="clip">{{ message.chat_name or message.chat_id or "" }}</td>
                 <td>{{ message.timestamp or message.created_at }}</td>
                 <td>{{ message.sender_name or "" }}</td>
                 <td>{{ message.sender_phone or "" }}</td>
                 <td>{{ message.message_type }}</td>
                 <td class="clip">{{ message.text_body or message.media_caption or "" }}</td>
                 <td class="clip">{{ message.media_id or "" }}</td>
+                <td class="clip">{{ message.media_path or "" }}</td>
                 <td>{{ message.processing_status }}</td>
               </tr>
               {% else %}
-              <tr><td colspan="8">No messages captured yet</td></tr>
+              <tr><td colspan="11">No messages captured yet</td></tr>
               {% endfor %}
             </tbody>
           </table>

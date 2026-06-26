@@ -29,6 +29,14 @@ This project is a lightweight Android Termux-compatible Flask webhook evidence s
 ## Scope Boundaries
 
 - Incoming webhooks are captured and stored.
+- Optional Baileys companion events are accepted at `POST /ingest/companion`.
 - Media metadata is captured, but media binary download is not implemented yet.
 - Google Drive upload is not implemented yet.
 - The server should remain simple enough to edit and debug from Termux.
+
+## Companion Bridge
+
+- `companion_bridge/` contains a Node.js WhiskeySockets/Baileys app.
+- It connects as a linked WhatsApp device and posts normalized records to Flask.
+- It is unofficial and may be fragile or policy-sensitive.
+- Do not add sending automation unless explicitly requested and reviewed.

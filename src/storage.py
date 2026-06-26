@@ -6,9 +6,12 @@ from src.db import get_connection
 from src.utils import now_iso, today_utc_parts
 
 
-def save_raw_event(payload):
+def save_raw_event(payload, source=None):
     year, month, day = today_utc_parts()
-    folder = Path("raw_events") / year / month / day
+    if source:
+        folder = Path("raw_events") / source / year / month / day
+    else:
+        folder = Path("raw_events") / year / month / day
     folder.mkdir(parents=True, exist_ok=True)
 
     path = folder / f"{now_iso().replace(':', '-')}--{uuid4().hex}.json"
