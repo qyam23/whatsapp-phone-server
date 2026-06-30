@@ -1,8 +1,16 @@
 from flask import Flask, jsonify, redirect, request, Response
 from dotenv import load_dotenv
 
-from src.dashboard import dashboard_bp
-from src.db import init_db, insert_companion_message, insert_message, insert_webhook_event, list_messages
+from src.dashboard import dashboard_bp, request_filters
+from src.db import (
+    companion_payload_to_record,
+    init_db,
+    insert_companion_message,
+    insert_message,
+    insert_webhook_event,
+    list_messages,
+    should_store_message,
+)
 from src.parser import parse_whatsapp_messages
 from src.storage import save_raw_event
 from src.utils import get_env, now_iso, rows_to_csv
@@ -45,8 +53,22 @@ def verify_webhook():
 @app.post("/webhook")
 def receive_webhook():
     payload = request.get_json(silent=True) or {}
-    raw_json_path = save_raw_event(payload)
     received_at = now_iso()
+    records = [
+        record
+        for record in parse_whatsapp_messages(payload, raw_json_path=None)
+        if should_store_message(record)
+    ]
+
+    if not records:
+        insert_webhook_event(
+            event_type="whatsapp_webhook_ignored",
+            raw_json_path=None,
+            received_at=received_at,
+        )
+        return jsonify({"status": "ignored", "reason": "retention_filter"}), 200
+
+    raw_json_path = save_raw_event(payload)
 
     insert_webhook_event(
         event_type="whatsapp_webhook",
@@ -54,7 +76,8 @@ def receive_webhook():
         received_at=received_at,
     )
 
-    for record in parse_whatsapp_messages(payload, raw_json_path):
+    for record in records:
+        record["raw_json_path"] = raw_json_path
         insert_message(record)
 
     return jsonify({"status": "received"}), 200
@@ -67,6 +90,15 @@ def ingest_companion():
         return jsonify({"error": "source must be baileys"}), 400
     if not payload.get("message_id"):
         return jsonify({"error": "message_id is required"}), 400
+
+    preview_record = companion_payload_to_record(payload)
+    if not should_store_message(preview_record):
+        insert_webhook_event(
+            event_type="baileys_companion_ignored",
+            raw_json_path=None,
+            received_at=now_iso(),
+        )
+        return jsonify({"status": "ignored", "reason": "retention_filter"}), 200
 
     raw_json_path = save_raw_event(payload, source="baileys")
     payload["raw_payload_path"] = payload.get("raw_payload_path") or raw_json_path
@@ -83,7 +115,7 @@ def ingest_companion():
 
 @app.get("/export/messages.csv")
 def export_messages_csv():
-    rows = list_messages(limit=None)
+    rows = list_messages(limit=None, filters=request_filters())
     csv_text = rows_to_csv(rows)
     return Response(
         csv_text,
@@ -94,7 +126,7 @@ def export_messages_csv():
 
 @app.get("/export/messages.json")
 def export_messages_json():
-    return jsonify({"messages": list_messages(limit=None)})
+    return jsonify({"messages": list_messages(limit=None, filters=request_filters())})
 
 
 if __name__ == "__main__":

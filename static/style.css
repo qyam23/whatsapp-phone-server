@@ -31,6 +31,38 @@ a {
   text-decoration: none;
 }
 
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  background: var(--accent-2);
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+button:hover {
+  filter: brightness(0.95);
+}
+
+input,
+select {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 9px 11px;
+  width: 100%;
+}
+
 .shell {
   width: min(1180px, calc(100% - 28px));
   margin: 0 auto;
@@ -146,6 +178,71 @@ dt {
   margin-bottom: 16px;
 }
 
+.filter-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.filter-grid label {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 7px;
+}
+
+.filter-grid button {
+  align-self: end;
+  min-height: 42px;
+}
+
+.compact-grid {
+  grid-template-columns: 0.9fr 1.8fr 1.4fr 0.7fr auto;
+  margin-bottom: 18px;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex !important;
+  gap: 8px !important;
+  padding-top: 24px;
+}
+
+.checkbox-row input {
+  min-height: auto;
+  width: auto;
+}
+
+.small {
+  font-size: 0.95rem;
+  margin-top: -6px;
+}
+
+.status-pill {
+  background: #dff8f4;
+  border-radius: 999px;
+  color: #087569;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 7px 11px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.row-actions form {
+  margin: 0;
+}
+
+.ghost-danger {
+  background: #ffe8e8;
+  color: #9f1239;
+}
+
 dl {
   margin: 18px 0 0;
 }
@@ -193,7 +290,13 @@ th {
   }
 
   .cards,
-  .grid.two {
+  .grid.two,
+  .filter-grid,
+  .compact-grid {
     grid-template-columns: 1fr;
+  }
+
+  .checkbox-row {
+    padding-top: 0;
   }
 }

@@ -14,10 +14,76 @@
           <h1>Messages</h1>
         </div>
         <div class="actions">
-          <a href="/dashboard">Dashboard</a>
-          <a href="/api/messages">JSON</a>
-          <a href="/export/messages.csv">Export CSV</a>
+          <a href="/dashboard{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Dashboard</a>
+          <a href="/api/messages{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">JSON</a>
+          <a href="/export/messages.csv{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Export CSV</a>
         </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Filters</h2>
+          <a href="/messages">Clear</a>
+        </div>
+        <form class="filter-grid" method="get" action="/messages">
+          <label>
+            Search
+            <input name="q" value="{{ filters.get('q', '') }}" placeholder="Text, sender, chat">
+          </label>
+          <label>
+            Source
+            <select name="source">
+              <option value="">All sources</option>
+              {% for source in options.sources %}
+              <option value="{{ source }}" {% if filters.get('source') == source %}selected{% endif %}>{{ source }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Type
+            <select name="message_type">
+              <option value="">All types</option>
+              {% for message_type in options.message_types %}
+              <option value="{{ message_type }}" {% if filters.get('message_type') == message_type %}selected{% endif %}>{{ message_type }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Groups / direct
+            <select name="kind">
+              <option value="">All chats</option>
+              <option value="groups" {% if filters.get('kind') == 'groups' %}selected{% endif %}>Groups only</option>
+              <option value="direct" {% if filters.get('kind') == 'direct' %}selected{% endif %}>Direct only</option>
+            </select>
+          </label>
+          <label>
+            Chat or group
+            <select name="chat">
+              <option value="">All chats</option>
+              {% for chat in options.chats %}
+              <option value="{{ chat.value }}" {% if filters.get('chat') == chat.value %}selected{% endif %}>{{ chat.label }} ({{ chat.count }})</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Sender
+            <select name="sender">
+              <option value="">All senders</option>
+              {% for sender in options.senders %}
+              <option value="{{ sender.value }}" {% if filters.get('sender') == sender.value %}selected{% endif %}>{{ sender.label }} ({{ sender.count }})</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            From
+            <input type="date" name="date_from" value="{{ filters.get('date_from', '') }}">
+          </label>
+          <label>
+            To
+            <input type="date" name="date_to" value="{{ filters.get('date_to', '') }}">
+          </label>
+          <button type="submit">Apply filters</button>
+        </form>
       </section>
 
       <section class="panel">
