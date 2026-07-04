@@ -188,6 +188,20 @@ p {
   color: var(--ink);
 }
 
+.topnav .ai-login-link {
+  border: 1px solid #b8d6c2;
+  border-radius: 3px;
+  background: var(--green-soft);
+  color: var(--green);
+  padding: 7px 9px;
+}
+
+.login-back-link {
+  margin-top: 18px;
+  font-size: 0.76rem;
+  text-align: center;
+}
+
 .dashboard-shell,
 .admin-shell,
 .message-shell,

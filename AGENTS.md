@@ -12,7 +12,8 @@ This project is a lightweight Android Termux-compatible Flask webhook evidence s
 - Keep dependencies lightweight.
 - Do not add FastAPI, pydantic, Celery, Redis, Docker, PostgreSQL, OCR, Whisper, embeddings, or locally hosted Hugging Face models.
 - Optional LLM analysis may use a server-side API only through allowlisted function tools. Models must never receive a database connection or arbitrary SQL execution capability.
-- All secrets must come from `.env`.
+- External API keys and access tokens must come from `.env`.
+- Local AI login uses a committed one-way password hash and a fallback session key so normal dashboard startup does not depend on `.env`.
 - Never hardcode or print access tokens.
 
 ## Current Architecture

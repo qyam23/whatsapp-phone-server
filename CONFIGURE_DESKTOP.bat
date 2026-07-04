@@ -18,5 +18,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo Settings saved. Restart the desktop simulation to apply them.
+echo AI settings saved. Restart the desktop simulation to apply them.
 pause

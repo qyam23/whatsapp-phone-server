@@ -3,12 +3,14 @@ import secrets
 import time
 from collections import defaultdict, deque
 from datetime import timedelta
+from functools import wraps
 from urllib.parse import urlsplit
 
 from flask import (
     Blueprint,
     abort,
     current_app,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -22,12 +24,18 @@ from src.utils import get_env
 
 auth_bp = Blueprint("auth", __name__)
 
-PUBLIC_ENDPOINTS = {
-    "health",
-    "verify_webhook",
+DEFAULT_AI_USERNAME = "qyam2323"
+DEFAULT_AI_PASSWORD_HASH = (
+    "scrypt:32768:8:1$a3XOgWgth0iKLskn$"
+    "d9e41e8f5c5b3b3fb1b8c278000d9164720c52dceb53abc7146ebaf9b1492faa"
+    "772a8385c6b8e487b7e9ec38af580619461e07d7d762b46fe4a0788bda19b795"
+)
+DEFAULT_FLASK_SECRET_KEY = (
+    "631bf6cadcd1409c9df19c51c9da4c211e9b817e7456585bb1068a35d5b3fbbd"
+)
+CSRF_EXEMPT_ENDPOINTS = {
     "receive_webhook",
     "ingest_companion",
-    "static",
     "auth.login",
 }
 MAX_LOGIN_ATTEMPTS = 5
@@ -36,25 +44,39 @@ _failed_logins = defaultdict(deque)
 
 
 def configure_auth(app):
-    app.secret_key = get_env("FLASK_SECRET_KEY")
+    app.secret_key = get_env("FLASK_SECRET_KEY", DEFAULT_FLASK_SECRET_KEY)
     app.config.update(
         PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=get_env("SESSION_COOKIE_SECURE", "1") != "0",
+        SESSION_COOKIE_SECURE=get_env("SESSION_COOKIE_SECURE", "0") == "1",
     )
 
 
-def auth_is_configured():
-    return bool(
-        current_app.secret_key
-        and get_env("QUERY_USERNAME")
-        and get_env("QUERY_PASSWORD_HASH")
-    )
+def ai_login_required(view=None, *, api=False):
+    def decorator(function):
+        function.ai_auth_required = True
+        function.ai_auth_api = api
+
+        @wraps(function)
+        def wrapped(*args, **kwargs):
+            return function(*args, **kwargs)
+
+        wrapped.ai_auth_required = True
+        wrapped.ai_auth_api = api
+        return wrapped
+
+    return decorator(view) if view is not None else decorator
+
+
+def ai_is_authenticated():
+    return session.get("ai_authenticated") is True
 
 
 def current_username():
-    return session.get("authenticated_user")
+    if not ai_is_authenticated():
+        return None
+    return session.get("ai_username")
 
 
 def csrf_token():
@@ -69,7 +91,7 @@ def _client_key():
     forwarded = request.headers.get("CF-Connecting-IP") or request.headers.get(
         "X-Forwarded-For", ""
     )
-    return (forwarded.split(",", 1)[0].strip() or request.remote_addr or "unknown")
+    return forwarded.split(",", 1)[0].strip() or request.remote_addr or "unknown"
 
 
 def _is_rate_limited(client_key):
@@ -86,33 +108,49 @@ def _record_failed_login(client_key):
 
 def _safe_next_url(value):
     if not value:
-        return url_for("dashboard.dashboard")
+        return url_for("query.query_database")
     parsed = urlsplit(value)
     if parsed.scheme or parsed.netloc or not value.startswith("/") or value.startswith("//"):
-        return url_for("dashboard.dashboard")
+        return url_for("query.query_database")
     return value
 
 
+def _validate_csrf():
+    expected = session.get("csrf_token", "")
+    supplied = request.form.get("csrf_token") or request.headers.get(
+        "X-CSRF-Token", ""
+    )
+    if not expected or not hmac.compare_digest(expected, supplied):
+        abort(400, description="Invalid CSRF token")
+
+
 @auth_bp.before_app_request
-def protect_private_routes():
-    if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint is None:
+def enforce_request_security():
+    if request.endpoint is None:
         return None
 
-    if not auth_is_configured():
-        if request.endpoint == "auth.logout":
-            return redirect(url_for("auth.login"))
-        return redirect(url_for("auth.login", setup="required"))
-
-    if request.method == "POST":
-        expected = session.get("csrf_token", "")
-        supplied = request.form.get("csrf_token") or request.headers.get(
-            "X-CSRF-Token", ""
+    view = current_app.view_functions.get(request.endpoint)
+    if getattr(view, "ai_auth_required", False) and not ai_is_authenticated():
+        if getattr(view, "ai_auth_api", False):
+            return (
+                jsonify(
+                    {
+                        "error": "ai_authentication_required",
+                        "message": "AI mode requires login.",
+                        "login_url": url_for("auth.login"),
+                    }
+                ),
+                401,
+            )
+        return redirect(
+            url_for("auth.login", next=request.full_path.rstrip("?"))
         )
-        if not expected or not hmac.compare_digest(expected, supplied):
-            abort(400, description="Invalid CSRF token")
 
-    if not current_username() and request.endpoint not in {"auth.login"}:
-        return redirect(url_for("auth.login", next=request.full_path.rstrip("?")))
+    if (
+        request.method == "POST"
+        and request.endpoint not in CSRF_EXEMPT_ENDPOINTS
+    ):
+        _validate_csrf()
 
     return None
 
@@ -133,42 +171,32 @@ def add_security_headers(response):
 @auth_bp.app_context_processor
 def inject_auth_context():
     return {
-        "csrf_token": csrf_token if current_app.secret_key else lambda: "",
+        "csrf_token": csrf_token,
+        "ai_authenticated": ai_is_authenticated(),
         "authenticated_user": current_username(),
     }
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
-    configured = auth_is_configured()
     error = None
     next_url = _safe_next_url(request.values.get("next"))
 
     if request.method == "POST":
-        if not configured:
-            return render_template("login.html", configured=False, error=None), 503
-        expected_token = session.get("csrf_token", "")
-        supplied_token = request.form.get("csrf_token", "")
-        if not expected_token or not hmac.compare_digest(
-            expected_token, supplied_token
-        ):
-            abort(400, description="Invalid CSRF token")
-
+        _validate_csrf()
         client_key = _client_key()
         if _is_rate_limited(client_key):
             error = "Too many failed attempts. Try again in 15 minutes."
         else:
             username = request.form.get("username", "")
             password = request.form.get("password", "")
-            expected_username = get_env("QUERY_USERNAME", "")
-            username_ok = hmac.compare_digest(username, expected_username)
-            password_ok = check_password_hash(
-                get_env("QUERY_PASSWORD_HASH", ""), password
-            )
+            username_ok = hmac.compare_digest(username, DEFAULT_AI_USERNAME)
+            password_ok = check_password_hash(DEFAULT_AI_PASSWORD_HASH, password)
             if username_ok and password_ok:
                 _failed_logins.pop(client_key, None)
                 session.clear()
-                session["authenticated_user"] = expected_username
+                session["ai_authenticated"] = True
+                session["ai_username"] = DEFAULT_AI_USERNAME
                 session["csrf_token"] = secrets.token_urlsafe(32)
                 session.permanent = True
                 return redirect(next_url)
@@ -178,7 +206,6 @@ def login():
 
     return render_template(
         "login.html",
-        configured=configured,
         error=error,
         next_url=next_url,
     )
@@ -187,4 +214,4 @@ def login():
 @auth_bp.post("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("auth.login"))
+    return redirect(url_for("dashboard.dashboard"))

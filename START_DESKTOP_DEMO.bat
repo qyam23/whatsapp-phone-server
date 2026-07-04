@@ -37,7 +37,7 @@ if errorlevel 1 goto failed
 
 :configured
 if not exist ".env.desktop" (
-  echo First-time desktop setup:
+  echo Creating local desktop settings...
   "%VENV_PY%" scripts\setup_desktop.py
   if errorlevel 1 goto failed
 )

@@ -163,39 +163,29 @@ shows an explicit no-data state instead of sample or fabricated values.
 Technical filters, exports, retention rules, machine classification, and recent raw
 records live under `/administration`.
 
-## Browser Authentication
+## Dashboard and AI Authentication
 
-Dashboard, query, administration, API, and export routes require a signed-in
-session. Health checks and WhatsApp ingestion routes remain available without a
-browser session.
+Normal operations are open immediately after startup. No login or authentication
+variables are required for the dashboard, administration, messages, operational
+APIs, exports, Baileys ingestion, Meta webhooks, or health checks.
 
-Generate a password hash on the phone:
+Only features that can send data to an external AI service or consume API credits
+require AI-mode login:
 
-```bash
-python scripts/generate_password_hash.py
+```text
+username: qyam2323
+password: mor
 ```
 
-Generate a Flask signing key:
+The application stores only the generated password hash in the authentication
+module. The clear password is not rendered in the UI or written to logs. AI
+sessions expire after 30 minutes, and five failed login attempts from one client
+trigger a temporary 15-minute lockout.
 
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Add the resulting values to `.env`:
-
-```env
-QUERY_USERNAME=qyam2323
-QUERY_PASSWORD_HASH=<generated-scrypt-hash>
-FLASK_SECRET_KEY=<generated-random-value>
-SESSION_COOKIE_SECURE=1
-```
-
-Do not store a plaintext password or commit `.env`. The login session expires
-after 30 minutes. Five failed login attempts from one client trigger a temporary
-15-minute lockout.
-
-For local HTTP-only testing, set `SESSION_COOKIE_SECURE=0`. Keep it enabled when
-accessing the server through an HTTPS Cloudflare hostname.
+`FLASK_SECRET_KEY` is optional. The app includes a stable local fallback so a
+fresh pull starts without `.env` authentication fields. Set a private
+`FLASK_SECRET_KEY` and `SESSION_COOKIE_SECURE=1` when exposing the server through
+an HTTPS Cloudflare hostname.
 
 ## AI Data Assistant
 
@@ -222,7 +212,8 @@ OPENAI_MODEL=gpt-5.4-mini
 ```
 
 Never place the API key in HTML, JavaScript, Git, screenshots, or chat messages.
-After changing `.env`, restart Flask.
+The key is optional until an AI action is used. After changing `.env`, restart
+Flask.
 
 ## Storage
 

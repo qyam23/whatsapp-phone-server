@@ -22,11 +22,6 @@ def main():
     )
     os.environ["DESKTOP_DEMO"] = "1"
 
-    if not os.getenv("QUERY_PASSWORD_HASH") or not os.getenv("FLASK_SECRET_KEY"):
-        raise SystemExit(
-            "Desktop settings are missing. Run CONFIGURE_DESKTOP.bat first."
-        )
-
     from scripts.seed_desktop_demo import seed_if_empty
 
     message_count = seed_if_empty()
@@ -34,7 +29,7 @@ def main():
     from app import app
 
     port = int(os.getenv("DESKTOP_PORT", "8765"))
-    url = f"http://127.0.0.1:{port}/login"
+    url = f"http://127.0.0.1:{port}/dashboard"
     print("")
     print("Mor Factory Desktop Simulation")
     print(f"URL: {url}")

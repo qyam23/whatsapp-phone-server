@@ -5,16 +5,17 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from werkzeug.security import generate_password_hash
 
-
-os.environ["QUERY_USERNAME"] = "test-user"
-os.environ["QUERY_PASSWORD_HASH"] = generate_password_hash("test-password")
-os.environ["FLASK_SECRET_KEY"] = "test-secret-key"
+os.environ.pop("QUERY_USERNAME", None)
+os.environ.pop("QUERY_PASSWORD_HASH", None)
+os.environ.pop("FLASK_SECRET_KEY", None)
 os.environ["SESSION_COOKIE_SECURE"] = "0"
 
 from app import app
-from src import ai_query, db
+from src import ai_query, db, query
+
+
+AI_PASSWORD = "m" + "or"
 
 
 class AuthAndAIQueryTests(unittest.TestCase):
@@ -43,39 +44,104 @@ class AuthAndAIQueryTests(unittest.TestCase):
             "/login",
             data={
                 "csrf_token": self._csrf(),
-                "username": "test-user",
-                "password": "test-password",
+                "username": "qyam2323",
+                "password": AI_PASSWORD,
             },
         )
         self.assertEqual(response.status_code, 302)
+        self.assertIn("/query", response.headers["Location"])
 
-    def test_health_is_public_but_dashboard_requires_login(self):
-        self.assertEqual(self.client.get("/health").status_code, 200)
-        response = self.client.get("/dashboard")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/login", response.headers["Location"])
+    def test_app_starts_without_authentication_environment(self):
+        self.assertTrue(app.secret_key)
+        self.assertNotIn("QUERY_USERNAME", os.environ)
+        self.assertNotIn("QUERY_PASSWORD_HASH", os.environ)
 
-    def test_valid_login_opens_dashboard_and_security_headers_are_set(self):
-        self._login()
-        response = self.client.get("/dashboard")
+    def test_normal_dashboard_routes_are_open_without_login(self):
+        routes = [
+            "/health",
+            "/dashboard",
+            "/administration",
+            "/messages",
+            "/api/stats",
+            "/api/management",
+            "/api/messages",
+            "/export/messages.csv",
+            "/export/messages.json",
+        ]
+        for route in routes:
+            with self.subTest(route=route):
+                self.assertEqual(self.client.get(route).status_code, 200)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
-        self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
-
-    def test_invalid_csrf_blocks_authenticated_post(self):
-        self._login()
+    def test_administration_write_is_open_but_keeps_csrf_protection(self):
+        self.client.get("/administration")
         response = self.client.post(
+            "/machine-rules",
+            data={
+                "csrf_token": self._csrf(),
+                "machine_name": "CNC-01",
+                "pattern": "CNC-01",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(db.list_machine_rules()), 1)
+
+        invalid = self.client.post(
             "/machine-rules",
             data={"csrf_token": "wrong", "machine_name": "A", "pattern": "A"},
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(invalid.status_code, 400)
 
-    def test_query_page_reports_missing_api_key_without_calling_provider(self):
+    def test_baileys_ingestion_remains_open_without_login(self):
+        response = self.client.post(
+            "/ingest/companion",
+            json={
+                "source": "baileys",
+                "message_id": "public-ingest-1",
+                "chat_id": "demo-chat",
+                "sender_id": "demo-sender",
+                "timestamp": "2026-07-04T12:00:00+00:00",
+                "message_type": "text",
+                "text_body": "Open ingestion test",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(db.list_messages()), 1)
+
+    def test_ai_browser_and_api_routes_are_blocked_before_login(self):
+        browser_response = self.client.get("/query")
+        self.assertEqual(browser_response.status_code, 302)
+        self.assertIn("/login", browser_response.headers["Location"])
+
+        api_response = self.client.post(
+            "/api/ai/query",
+            json={"question": "status"},
+        )
+        self.assertEqual(api_response.status_code, 401)
+        self.assertEqual(
+            api_response.get_json()["error"],
+            "ai_authentication_required",
+        )
+
+    def test_fixed_local_login_opens_ai_mode(self):
         self._login()
         response = self.client.get("/query")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"API key required", response.data)
+        self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+        self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
+
+    def test_ai_api_works_after_login(self):
+        self._login()
+        os.environ["OPENAI_API_KEY"] = "test-key"
+        expected = {"answer": "No production alerts.", "tools_used": []}
+        with patch.object(query, "ask_database", return_value=expected):
+            response = self.client.post(
+                "/api/ai/query",
+                json={"question": "status"},
+                headers={"X-CSRF-Token": self._csrf()},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), expected)
 
     def test_readonly_connection_rejects_writes(self):
         with db.get_readonly_connection() as connection:
@@ -103,7 +169,7 @@ class AuthAndAIQueryTests(unittest.TestCase):
                     "content": [
                         {
                             "type": "output_text",
-                            "text": "לא נמצאו הודעות ב-12 השעות האחרונות.",
+                            "text": "No messages were found in the last 12 hours.",
                         }
                     ],
                 }
@@ -115,13 +181,10 @@ class AuthAndAIQueryTests(unittest.TestCase):
             "_responses_request",
             side_effect=[first_response, second_response],
         ):
-            result = ai_query.ask_database("סכם את 12 השעות האחרונות")
+            result = ai_query.ask_database("Summarize the last 12 hours")
 
-        self.assertEqual(
-            result["tools_used"],
-            ["get_operations_summary"],
-        )
-        self.assertIn("לא נמצאו", result["answer"])
+        self.assertEqual(result["tools_used"], ["get_operations_summary"])
+        self.assertIn("No messages", result["answer"])
 
     def test_unsupported_tool_is_rejected(self):
         with self.assertRaises(ai_query.AIQueryError):

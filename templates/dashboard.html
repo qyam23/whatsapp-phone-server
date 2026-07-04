@@ -21,10 +21,14 @@
         <a href="/query">Ask Data</a>
         <a href="/messages">Messages</a>
         <a href="/administration">Administration</a>
+        {% if ai_authenticated %}
         <form method="post" action="/logout">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="nav-button" type="submit">Sign out</button>
+          <button class="nav-button" type="submit">Exit AI</button>
         </form>
+        {% else %}
+        <a class="ai-login-link" href="/login?next=/query">AI login</a>
+        {% endif %}
       </nav>
     </header>
 
