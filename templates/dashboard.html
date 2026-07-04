@@ -3,310 +3,223 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>WhatsApp Evidence Dashboard</title>
+    <meta http-equiv="refresh" content="43200">
+    <title>Mor Factory Operations Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
   </head>
-  <body>
-    <main class="shell">
-      <section class="hero">
+  <body class="management-page">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
         <div>
-          <p class="eyebrow">Termux Evidence Server</p>
-          <h1>WhatsApp Webhook Dashboard</h1>
-          <p class="subtle">Lightweight Flask + SQLite capture dashboard for Meta Cloud API webhooks and optional Baileys companion ingestion.</p>
+          <h1>Mor Factory Operations Dashboard <span>Sderot, Israel</span></h1>
+          <p>Production Departments Management &amp; Operations</p>
         </div>
-        <div class="actions">
-          <a href="/messages{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Messages</a>
-          <a href="/api/stats{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Stats JSON</a>
-          <a href="/export/messages.csv{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Export CSV</a>
-        </div>
-      </section>
+      </div>
+      <nav class="topnav" aria-label="Primary">
+        <a class="active" href="/dashboard">Overview</a>
+        <a href="/messages">Messages</a>
+        <a href="/administration">Administration</a>
+      </nav>
+    </header>
 
-      <section class="panel">
-        <div class="panel-title">
-          <h2>Filters</h2>
-          <a href="/dashboard">Clear</a>
+    <main class="dashboard-shell">
+      <section class="dashboard-toolbar" aria-label="Dashboard controls">
+        <div>
+          <p class="section-kicker">Executive overview</p>
+          <h2>Production communication pulse</h2>
         </div>
-        <form class="filter-grid" method="get" action="/dashboard">
-          <label>
-            Search
-            <input name="q" value="{{ filters.get('q', '') }}" placeholder="Text, sender, chat">
-          </label>
-          <label>
-            Source
-            <select name="source">
-              <option value="">All sources</option>
-              {% for source in options.sources %}
-              <option value="{{ source }}" {% if filters.get('source') == source %}selected{% endif %}>{{ source }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>
-            Type
-            <select name="message_type">
-              <option value="">All types</option>
-              {% for message_type in options.message_types %}
-              <option value="{{ message_type }}" {% if filters.get('message_type') == message_type %}selected{% endif %}>{{ message_type }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>
-            Groups / direct
-            <select name="kind">
-              <option value="">All chats</option>
-              <option value="groups" {% if filters.get('kind') == 'groups' %}selected{% endif %}>Groups only</option>
-              <option value="direct" {% if filters.get('kind') == 'direct' %}selected{% endif %}>Direct only</option>
-            </select>
-          </label>
-          <label>
-            Chat or group
-            <select name="chat">
-              <option value="">All chats</option>
-              {% for chat in options.chats %}
-              <option value="{{ chat.value }}" {% if filters.get('chat') == chat.value %}selected{% endif %}>{{ chat.label }} ({{ chat.count }})</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>
-            Sender
-            <select name="sender">
-              <option value="">All senders</option>
-              {% for sender in options.senders %}
-              <option value="{{ sender.value }}" {% if filters.get('sender') == sender.value %}selected{% endif %}>{{ sender.label }} ({{ sender.count }})</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>
-            From
-            <input type="date" name="date_from" value="{{ filters.get('date_from', '') }}">
-          </label>
-          <label>
-            To
-            <input type="date" name="date_to" value="{{ filters.get('date_to', '') }}">
-          </label>
-          <button type="submit">Apply filters</button>
-        </form>
-      </section>
-
-      <section class="panel">
-        <div class="panel-title">
-          <h2>History capture rules</h2>
-          <span class="status-pill">{{ retention_rules | selectattr('enabled') | list | length }} active</span>
-        </div>
-        <p class="subtle small">When no active rules exist, every incoming message is stored. Once at least one rule is active, only matching groups, chats, or senders are kept from that point forward.</p>
-        <form class="filter-grid compact-grid" method="post" action="/retention-rules">
-          <label>
-            Rule
-            <select name="rule_type">
-              <option value="chat">Group or chat</option>
-              <option value="sender">Person / sender</option>
-            </select>
-          </label>
-          <label>
-            Value
-            <input name="value" placeholder="chat_id, sender phone, or sender id" required>
-          </label>
-          <label>
-            Label
-            <input name="label" placeholder="Friendly name">
-          </label>
-          <label class="checkbox-row">
-            <input type="checkbox" name="is_group" value="1">
-            Group
-          </label>
-          <button type="submit">Add rule</button>
-        </form>
-
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Type</th><th>Name</th><th>Value</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-              {% for rule in retention_rules %}
-              <tr>
-                <td>{{ rule.rule_type }}</td>
-                <td>{{ rule.label or rule.value }}</td>
-                <td class="clip">{{ rule.value }}</td>
-                <td>{{ "active" if rule.enabled else "paused" }}</td>
-                <td class="row-actions">
-                  <form method="post" action="/retention-rules/{{ rule.id }}/toggle">
-                    <input type="hidden" name="enabled" value="{{ 0 if rule.enabled else 1 }}">
-                    <button type="submit">{{ "Pause" if rule.enabled else "Enable" }}</button>
-                  </form>
-                  <form method="post" action="/retention-rules/{{ rule.id }}/delete">
-                    <button type="submit" class="ghost-danger">Delete</button>
-                  </form>
-                </td>
-              </tr>
-              {% else %}
-              <tr><td colspan="5">No capture rules yet</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="toolbar-controls">
+          <div class="period-tabs" aria-label="Time period">
+            <a class="{{ 'active' if dashboard.period == '12h' else '' }}" href="/dashboard?period=12h">Last 12 Hours</a>
+            <a class="{{ 'active' if dashboard.period == '7d' else '' }}" href="/dashboard?period=7d">Last 7 Days</a>
+            <a class="{{ 'active' if dashboard.period == '30d' else '' }}" href="/dashboard?period=30d">Last 30 Days</a>
+          </div>
+          <div class="freshness">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>Database connected</span>
+            <time datetime="{{ dashboard.generated_at }}">Updated {{ dashboard.generated_at[:16].replace('T', ' ') }} UTC</time>
+          </div>
         </div>
       </section>
 
-      <section class="cards">
-        <article><span>Total messages</span><strong>{{ stats.total_messages }}</strong></article>
-        <article><span>Messages today</span><strong>{{ stats.messages_today }}</strong></article>
-        <article><span>Text</span><strong>{{ stats.text_count }}</strong></article>
-        <article><span>Images</span><strong>{{ stats.image_count }}</strong></article>
-        <article><span>Audio</span><strong>{{ stats.audio_count }}</strong></article>
-        <article><span>Video</span><strong>{{ stats.video_count }}</strong></article>
-        <article><span>Documents</span><strong>{{ stats.document_count }}</strong></article>
-        <article><span>Unknown</span><strong>{{ stats.unknown_count }}</strong></article>
-      </section>
-
-      <section class="grid two">
-        <article class="panel">
-          <h2>Last activity</h2>
-          <dl>
-            <dt>Last webhook received</dt>
-            <dd>{{ stats.last_webhook_received_time or "None yet" }}</dd>
-            <dt>Last message received</dt>
-            <dd>{{ stats.last_message_received_time or "None yet" }}</dd>
-          </dl>
+      <section class="kpi-grid" aria-label="Key performance indicators">
+        <article class="kpi-card">
+          <div class="kpi-heading"><span>Messages</span><span class="kpi-code">VOL</span></div>
+          <strong>{{ dashboard.metrics.messages }}</strong>
+          <p class="comparison {{ dashboard.metrics.message_change.direction }}">
+            {{ dashboard.metrics.message_change.label }} vs previous period
+          </p>
         </article>
-
-        <article class="panel">
-          <h2>Messages by source</h2>
-          <table>
-            <thead><tr><th>Source</th><th>Count</th></tr></thead>
-            <tbody>
-              {% for row in stats.messages_by_source %}
-              <tr><td>{{ row.source or "meta" }}</td><td>{{ row.count }}</td></tr>
-              {% else %}
-              <tr><td colspan="2">No messages yet</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <article class="kpi-card">
+          <div class="kpi-heading"><span>Active people</span><span class="kpi-code">PPL</span></div>
+          <strong>{{ dashboard.metrics.active_senders }}</strong>
+          <p class="comparison {{ dashboard.metrics.sender_change.direction }}">
+            {{ dashboard.metrics.sender_change.label }} vs previous period
+          </p>
+        </article>
+        <article class="kpi-card">
+          <div class="kpi-heading"><span>Active groups</span><span class="kpi-code">GRP</span></div>
+          <strong>{{ dashboard.metrics.active_groups }}</strong>
+          <p class="comparison {{ dashboard.metrics.group_change.direction }}">
+            {{ dashboard.metrics.group_change.label }} vs previous period
+          </p>
+        </article>
+        <article class="kpi-card">
+          <div class="kpi-heading"><span>Message rate</span><span class="kpi-code">RATE</span></div>
+          <strong>{{ dashboard.metrics.messages_per_hour }}<small>/hr</small></strong>
+          <p>Average across {{ dashboard.period_label | lower }}</p>
+        </article>
+        <article class="kpi-card">
+          <div class="kpi-heading"><span>Average gap</span><span class="kpi-code">GAP</span></div>
+          <strong class="duration">{{ dashboard.metrics.average_gap }}</strong>
+          <p>Between consecutive messages</p>
         </article>
       </section>
 
-      <section class="grid two">
-        <article class="panel">
-          <h2>Messages by chat/group</h2>
-          <table>
-            <thead><tr><th>Chat</th><th>Kind</th><th>Count</th><th></th></tr></thead>
-            <tbody>
-              {% for row in stats.messages_by_chat %}
-              <tr>
-                <td>{{ row.chat }}</td>
-                <td>{{ "group" if row.is_group else "direct" }}</td>
-                <td>{{ row.count }}</td>
-                <td>
-                  {% if row.chat_id %}
-                  <form method="post" action="/retention-rules">
-                    <input type="hidden" name="rule_type" value="chat">
-                    <input type="hidden" name="value" value="{{ row.chat_id }}">
-                    <input type="hidden" name="label" value="{{ row.chat }}">
-                    <input type="hidden" name="is_group" value="{{ row.is_group }}">
-                    <button type="submit">Keep</button>
-                  </form>
-                  {% endif %}
-                </td>
-              </tr>
-              {% else %}
-              <tr><td colspan="4">No chats yet</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+      {% if not dashboard.metrics.messages %}
+      <section class="notice info-notice">
+        <strong>No messages in {{ dashboard.period_label | lower }}.</strong>
+        <span>The dashboard is connected and will populate when matching records arrive.</span>
+      </section>
+      {% endif %}
+
+      <section class="dashboard-grid primary-grid">
+        <article class="data-panel trend-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Message Activity Trend</h3>
+              <p>{{ dashboard.period_label }} compared with the previous equal period</p>
+            </div>
+            <div class="legend" aria-label="Chart legend">
+              <span><i class="legend-line current"></i>Current</span>
+              <span><i class="legend-line previous"></i>Previous</span>
+            </div>
+          </div>
+          <div class="chart-frame">
+            <svg id="activity-chart" class="line-chart" role="img" aria-label="Message activity trend"></svg>
+          </div>
         </article>
 
-        <article class="panel">
-          <h2>Messages by sender</h2>
-          <table>
-            <thead><tr><th>Sender</th><th>Count</th><th></th></tr></thead>
-            <tbody>
-              {% for row in stats.messages_by_sender %}
-              <tr>
-                <td>{{ row.sender }}</td>
-                <td>{{ row.count }}</td>
-                <td>
-                  <form method="post" action="/retention-rules">
-                    <input type="hidden" name="rule_type" value="sender">
-                    <input type="hidden" name="value" value="{{ row.sender_value or row.sender }}">
-                    <input type="hidden" name="label" value="{{ row.sender }}">
-                    <button type="submit">Keep</button>
-                  </form>
-                </td>
-              </tr>
-              {% else %}
-              <tr><td colspan="3">No senders yet</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <article class="data-panel people-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Most Active People</h3>
+              <p>Messages sent in {{ dashboard.period_label | lower }}</p>
+            </div>
+          </div>
+          {% set sender_max = dashboard.top_senders[0].count if dashboard.top_senders else 1 %}
+          <div class="rank-list">
+            {% for person in dashboard.top_senders %}
+            <div class="rank-row">
+              <span class="rank-number">{{ loop.index }}</span>
+              <div class="rank-main">
+                <div><strong>{{ person.label }}</strong><span>{{ person.count }}</span></div>
+                <div class="bar-track"><span style="width: {{ (person.count / sender_max * 100) | round }}%"></span></div>
+              </div>
+            </div>
+            {% else %}
+            <div class="empty-state"><strong>No activity</strong><span>No sender data is available for this period.</span></div>
+            {% endfor %}
+          </div>
         </article>
       </section>
 
-      <section class="grid two">
-        <article class="panel">
-          <h2>Messages by type</h2>
-          <table>
-            <thead><tr><th>Type</th><th>Count</th></tr></thead>
-            <tbody>
-              {% for row in stats.messages_by_type %}
-              <tr><td>{{ row.message_type or "unknown" }}</td><td>{{ row.count }}</td></tr>
-              {% else %}
-              <tr><td colspan="2">No messages yet</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+      <section class="dashboard-grid secondary-grid">
+        <article class="data-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Production Groups</h3>
+              <p>WhatsApp groups ranked by message volume</p>
+            </div>
+          </div>
+          {% set group_max = dashboard.top_groups[0].count if dashboard.top_groups else 1 %}
+          <div class="rank-list compact">
+            {% for group in dashboard.top_groups %}
+            <div class="rank-row">
+              <span class="rank-number">{{ loop.index }}</span>
+              <div class="rank-main">
+                <div><strong>{{ group.label }}</strong><span>{{ group.count }}</span></div>
+                <div class="bar-track blue"><span style="width: {{ (group.count / group_max * 100) | round }}%"></span></div>
+              </div>
+            </div>
+            {% else %}
+            <div class="empty-state"><strong>No group activity</strong><span>No production group records were found.</span></div>
+            {% endfor %}
+          </div>
         </article>
 
-        <article class="panel">
-          <h2>Messages by day</h2>
-          <table>
-            <thead><tr><th>Day</th><th>Count</th></tr></thead>
-            <tbody>
-              {% for row in stats.messages_by_day %}
-              <tr><td>{{ row.day or "unknown" }}</td><td>{{ row.count }}</td></tr>
-              {% else %}
-              <tr><td colspan="2">No days yet</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <article class="data-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Machine Events</h3>
+              <p>Opened and closed events in the selected period</p>
+            </div>
+            {% if dashboard.machine_data_available %}
+            <span class="data-badge">Classified</span>
+            {% else %}
+            <span class="data-badge muted">Awaiting rules</span>
+            {% endif %}
+          </div>
+          {% if dashboard.machine_data_available %}
+          {% set event_max = [dashboard.machine_period.opened, dashboard.machine_period.closed, 1] | max %}
+          <div class="event-bars" aria-label="Opened versus closed events">
+            <div class="event-bar-row">
+              <span>Opened</span>
+              <div class="bar-track alert"><i style="width: {{ (dashboard.machine_period.opened / event_max * 100) | round }}%"></i></div>
+              <strong>{{ dashboard.machine_period.opened }}</strong>
+            </div>
+            <div class="event-bar-row">
+              <span>Closed</span>
+              <div class="bar-track"><i style="width: {{ (dashboard.machine_period.closed / event_max * 100) | round }}%"></i></div>
+              <strong>{{ dashboard.machine_period.closed }}</strong>
+            </div>
+          </div>
+          <div class="event-timing">
+            <div><strong>{{ dashboard.machine_period.average_resolution }}</strong><span>Open-to-close</span></div>
+            <div><strong>{{ dashboard.machine_period.average_open_interval }}</strong><span>Open-to-open</span></div>
+          </div>
+          {% else %}
+          <div class="empty-state machine-empty">
+            <strong>No classified machine data</strong>
+            <span>Message records do not contain a machine or event field. Add transparent matching rules in Administration to enable these metrics.</span>
+            <a href="/administration#machine-rules">Configure classification</a>
+          </div>
+          {% endif %}
+        </article>
+
+        <article class="data-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Rolling 30-Day Recurrence</h3>
+              <p>Machines ranked by classified opening events</p>
+            </div>
+          </div>
+          {% set recurrence_max = dashboard.machine_month.recurrence[0].count if dashboard.machine_month.recurrence else 1 %}
+          <div class="rank-list compact">
+            {% for machine in dashboard.machine_month.recurrence %}
+            <div class="rank-row">
+              <span class="rank-number alert">{{ loop.index }}</span>
+              <div class="rank-main">
+                <div><strong>{{ machine.machine }}</strong><span>{{ machine.count }}</span></div>
+                <div class="bar-track alert"><span style="width: {{ (machine.count / recurrence_max * 100) | round }}%"></span></div>
+              </div>
+            </div>
+            {% else %}
+            <div class="empty-state"><strong>No recurrence data</strong><span>Monthly recurrence appears after machine classification rules match stored messages.</span></div>
+            {% endfor %}
+          </div>
         </article>
       </section>
 
-      <section class="panel">
-        <div class="panel-title">
-          <h2>Last 50 messages</h2>
-          <a href="/messages">View all recent</a>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Source</th>
-                <th>Chat</th>
-                <th>Timestamp</th>
-                <th>Sender</th>
-                <th>Type</th>
-                <th>Text</th>
-                <th>Media ID</th>
-                <th>Media path</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for message in messages %}
-              <tr>
-                <td>{{ message.id }}</td>
-                <td>{{ message.source or "meta" }}</td>
-                <td class="clip">{{ message.chat_name or message.chat_id or "" }}</td>
-                <td>{{ message.timestamp or message.created_at }}</td>
-                <td>{{ message.sender_name or message.sender_phone or "unknown" }}</td>
-                <td>{{ message.message_type }}</td>
-                <td class="clip">{{ message.text_body or message.media_caption or "" }}</td>
-                <td class="clip">{{ message.media_id or "" }}</td>
-                <td class="clip">{{ message.media_path or "" }}</td>
-              </tr>
-              {% else %}
-              <tr><td colspan="9">No messages captured yet</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <footer class="dashboard-footer">
+        <span>Source: SQLite message archive</span>
+        <span>Latest message: {{ dashboard.last_message_at or "No records" }}</span>
+        <span>Automatic refresh: every 12 hours</span>
+      </footer>
     </main>
+
+    <script id="dashboard-data" type="application/json">{{ dashboard.trend | tojson }}</script>
+    <script src="/static/dashboard.js"></script>
   </body>
 </html>

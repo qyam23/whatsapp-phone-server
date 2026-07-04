@@ -3,35 +3,46 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Messages | WhatsApp Evidence Dashboard</title>
+    <title>Messages | Mor Factory Operations</title>
     <link rel="stylesheet" href="/static/style.css">
   </head>
   <body>
-    <main class="shell">
-      <section class="hero compact">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
         <div>
-          <p class="eyebrow">Recent records</p>
-          <h1>Messages</h1>
+          <h1>Mor Factory Operations <span>Message Archive</span></h1>
+          <p>Stored WhatsApp records and evidence</p>
         </div>
-        <div class="actions">
-          <a href="/dashboard{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Dashboard</a>
+      </div>
+      <nav class="topnav" aria-label="Primary">
+        <a href="/dashboard">Overview</a>
+        <a class="active" href="/messages">Messages</a>
+        <a href="/administration">Administration</a>
+      </nav>
+    </header>
+
+    <main class="message-shell">
+      <section class="message-heading">
+        <div>
+          <p class="section-kicker">Evidence archive</p>
+          <h2>Messages</h2>
+          <p>Review and filter the original stored records.</p>
+        </div>
+        <div class="admin-actions">
           <a href="/api/messages{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">JSON</a>
-          <a href="/export/messages.csv{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Export CSV</a>
+          <a class="primary-action" href="/export/messages.csv{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Export CSV</a>
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-title">
-          <h2>Filters</h2>
-          <a href="/messages">Clear</a>
+      <section class="admin-panel">
+        <div class="panel-heading">
+          <div><h3>Filters</h3><p>Narrow the archive by source, conversation or date.</p></div>
+          <a href="/messages">Clear filters</a>
         </div>
         <form class="filter-grid" method="get" action="/messages">
-          <label>
-            Search
-            <input name="q" value="{{ filters.get('q', '') }}" placeholder="Text, sender, chat">
-          </label>
-          <label>
-            Source
+          <label>Search<input name="q" value="{{ filters.get('q', '') }}" placeholder="Text, sender or chat"></label>
+          <label>Source
             <select name="source">
               <option value="">All sources</option>
               {% for source in options.sources %}
@@ -39,8 +50,7 @@
               {% endfor %}
             </select>
           </label>
-          <label>
-            Type
+          <label>Type
             <select name="message_type">
               <option value="">All types</option>
               {% for message_type in options.message_types %}
@@ -48,16 +58,14 @@
               {% endfor %}
             </select>
           </label>
-          <label>
-            Groups / direct
+          <label>Conversation
             <select name="kind">
-              <option value="">All chats</option>
+              <option value="">Groups and direct</option>
               <option value="groups" {% if filters.get('kind') == 'groups' %}selected{% endif %}>Groups only</option>
               <option value="direct" {% if filters.get('kind') == 'direct' %}selected{% endif %}>Direct only</option>
             </select>
           </label>
-          <label>
-            Chat or group
+          <label>Group or chat
             <select name="chat">
               <option value="">All chats</option>
               {% for chat in options.chats %}
@@ -65,8 +73,7 @@
               {% endfor %}
             </select>
           </label>
-          <label>
-            Sender
+          <label>Sender
             <select name="sender">
               <option value="">All senders</option>
               {% for sender in options.senders %}
@@ -74,53 +81,32 @@
               {% endfor %}
             </select>
           </label>
-          <label>
-            From
-            <input type="date" name="date_from" value="{{ filters.get('date_from', '') }}">
-          </label>
-          <label>
-            To
-            <input type="date" name="date_to" value="{{ filters.get('date_to', '') }}">
-          </label>
+          <label>From<input type="date" name="date_from" value="{{ filters.get('date_from', '') }}"></label>
+          <label>To<input type="date" name="date_to" value="{{ filters.get('date_to', '') }}"></label>
           <button type="submit">Apply filters</button>
         </form>
       </section>
 
-      <section class="panel">
+      <section class="admin-panel">
         <div class="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Source</th>
-                <th>Chat/group</th>
-                <th>Timestamp</th>
-                <th>Sender name</th>
-                <th>Sender phone</th>
-                <th>Type</th>
-                <th>Text body</th>
-                <th>Media ID</th>
-                <th>Media path</th>
-                <th>Status</th>
-              </tr>
-            </thead>
+            <thead><tr><th>ID</th><th>Source</th><th>Group or chat</th><th>Timestamp</th><th>Sender</th><th>Phone</th><th>Type</th><th>Message</th><th>Media</th><th>Status</th></tr></thead>
             <tbody>
               {% for message in messages %}
               <tr>
                 <td>{{ message.id }}</td>
                 <td>{{ message.source or "meta" }}</td>
-                <td class="clip">{{ message.chat_name or message.chat_id or "" }}</td>
+                <td>{{ message.chat_name or message.chat_id or "Direct" }}</td>
                 <td>{{ message.timestamp or message.created_at }}</td>
-                <td>{{ message.sender_name or "" }}</td>
+                <td>{{ message.sender_name or "Unknown" }}</td>
                 <td>{{ message.sender_phone or "" }}</td>
                 <td>{{ message.message_type }}</td>
                 <td class="clip">{{ message.text_body or message.media_caption or "" }}</td>
-                <td class="clip">{{ message.media_id or "" }}</td>
-                <td class="clip">{{ message.media_path or "" }}</td>
+                <td class="clip">{{ message.media_id or message.media_path or "" }}</td>
                 <td>{{ message.processing_status }}</td>
               </tr>
               {% else %}
-              <tr><td colspan="11">No messages captured yet</td></tr>
+              <tr><td colspan="10">No messages match the selected filters.</td></tr>
               {% endfor %}
             </tbody>
           </table>

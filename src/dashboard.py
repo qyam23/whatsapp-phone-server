@@ -1,12 +1,17 @@
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
 from src.db import (
+    delete_machine_rule,
     delete_retention_rule,
     get_filter_options,
+    get_management_dashboard,
     get_stats,
+    list_machine_rules,
     list_messages,
     list_retention_rules,
+    set_machine_rule_enabled,
     set_retention_rule_enabled,
+    upsert_machine_rule,
     upsert_retention_rule,
 )
 
@@ -31,16 +36,24 @@ def request_filters(args=None):
 
 @dashboard_bp.get("/dashboard")
 def dashboard():
-    filters = request_filters()
-    stats = get_stats(filters=filters)
-    messages = list_messages(limit=50, filters=filters)
+    period = request.args.get("period", "12h")
     return render_template(
         "dashboard.html",
-        stats=stats,
-        messages=messages,
+        dashboard=get_management_dashboard(period=period),
+    )
+
+
+@dashboard_bp.get("/administration")
+def administration():
+    filters = request_filters()
+    return render_template(
+        "administration.html",
+        stats=get_stats(filters=filters),
+        messages=list_messages(limit=50, filters=filters),
         filters=filters,
         options=get_filter_options(),
         retention_rules=list_retention_rules(),
+        machine_rules=list_machine_rules(),
     )
 
 
@@ -61,6 +74,11 @@ def api_stats():
     return jsonify(get_stats(filters=request_filters()))
 
 
+@dashboard_bp.get("/api/management")
+def api_management():
+    return jsonify(get_management_dashboard(period=request.args.get("period", "12h")))
+
+
 @dashboard_bp.get("/api/messages")
 def api_messages():
     return jsonify({"messages": list_messages(limit=100, filters=request_filters())})
@@ -76,17 +94,49 @@ def add_retention_rule():
     if rule_type in {"chat", "sender"} and value:
         upsert_retention_rule(rule_type, value, label=label, is_group=is_group)
 
-    return redirect(url_for("dashboard.dashboard"))
+    return redirect(url_for("dashboard.administration"))
 
 
 @dashboard_bp.post("/retention-rules/<int:rule_id>/toggle")
 def toggle_retention_rule(rule_id):
     enabled = request.form.get("enabled") == "1"
     set_retention_rule_enabled(rule_id, enabled)
-    return redirect(url_for("dashboard.dashboard"))
+    return redirect(url_for("dashboard.administration"))
 
 
 @dashboard_bp.post("/retention-rules/<int:rule_id>/delete")
 def remove_retention_rule(rule_id):
     delete_retention_rule(rule_id)
-    return redirect(url_for("dashboard.dashboard"))
+    return redirect(url_for("dashboard.administration"))
+
+
+@dashboard_bp.post("/machine-rules")
+def add_machine_rule():
+    machine_name = request.form.get("machine_name", "").strip()
+    pattern = request.form.get("pattern", "").strip()
+    department = request.form.get("department", "").strip()
+    open_keywords = request.form.get("open_keywords", "").strip()
+    close_keywords = request.form.get("close_keywords", "").strip()
+
+    if machine_name and pattern:
+        upsert_machine_rule(
+            machine_name=machine_name,
+            pattern=pattern,
+            department=department,
+            open_keywords=open_keywords,
+            close_keywords=close_keywords,
+        )
+
+    return redirect(url_for("dashboard.administration"))
+
+
+@dashboard_bp.post("/machine-rules/<int:rule_id>/toggle")
+def toggle_machine_rule(rule_id):
+    set_machine_rule_enabled(rule_id, request.form.get("enabled") == "1")
+    return redirect(url_for("dashboard.administration"))
+
+
+@dashboard_bp.post("/machine-rules/<int:rule_id>/delete")
+def remove_machine_rule(rule_id):
+    delete_machine_rule(rule_id)
+    return redirect(url_for("dashboard.administration"))

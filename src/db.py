@@ -1,17 +1,34 @@
+import os
 import sqlite3
+from collections import Counter, defaultdict
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.utils import now_iso
 
 
-DB_PATH = Path("data") / "messages.db"
+DB_PATH = Path(os.getenv("WHATSAPP_DB_PATH", str(Path("data") / "messages.db")))
+PERIODS = {
+    "12h": {"label": "Last 12 Hours", "duration": timedelta(hours=12), "buckets": 12},
+    "7d": {"label": "Last 7 Days", "duration": timedelta(days=7), "buckets": 7},
+    "30d": {"label": "Last 30 Days", "duration": timedelta(days=30), "buckets": 30},
+}
 
 
+@contextmanager
 def get_connection():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db():
@@ -75,6 +92,18 @@ def init_db():
                 enabled INTEGER DEFAULT 1,
                 created_at TEXT,
                 UNIQUE(rule_type, value)
+            );
+
+            CREATE TABLE IF NOT EXISTS machine_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_name TEXT NOT NULL,
+                department TEXT,
+                pattern TEXT NOT NULL,
+                open_keywords TEXT DEFAULT 'open,opened,fault,down,stopped',
+                close_keywords TEXT DEFAULT 'close,closed,fixed,resolved,running',
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT,
+                UNIQUE(machine_name, pattern)
             );
             """
         )
@@ -417,6 +446,307 @@ def get_stats(filters=None):
     }
 
 
+def _parse_timestamp(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _period_config(period):
+    return period if period in PERIODS else "12h", PERIODS.get(period, PERIODS["12h"])
+
+
+def _period_rows(conn, start, end):
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                id,
+                COALESCE(timestamp, created_at) AS occurred_at,
+                chat_id,
+                chat_name,
+                COALESCE(is_group, 0) AS is_group,
+                sender_phone,
+                sender_name,
+                message_type,
+                text_body,
+                media_caption
+            FROM messages
+            WHERE datetime(COALESCE(timestamp, created_at)) >= datetime(?)
+              AND datetime(COALESCE(timestamp, created_at)) < datetime(?)
+            ORDER BY datetime(COALESCE(timestamp, created_at)) ASC, id ASC
+            """,
+            (start.isoformat(), end.isoformat()),
+        ).fetchall()
+    ]
+
+
+def _identity(row, value_key, label_key):
+    value = row.get(value_key) or row.get(label_key)
+    label = row.get(label_key) or row.get(value_key) or "Unknown"
+    return value, label
+
+
+def _rank_rows(rows, value_key, label_key, limit=6, groups_only=False):
+    counts = Counter()
+    labels = {}
+    for row in rows:
+        if groups_only and not row.get("is_group"):
+            continue
+        value, label = _identity(row, value_key, label_key)
+        if not value:
+            continue
+        counts[value] += 1
+        labels[value] = label
+    return [
+        {"value": value, "label": labels[value], "count": count}
+        for value, count in counts.most_common(limit)
+    ]
+
+
+def _comparison(current, previous):
+    if previous == 0:
+        return {"value": None, "label": "New" if current else "No change", "direction": "flat"}
+    change = round(((current - previous) / previous) * 100)
+    direction = "up" if change > 0 else "down" if change < 0 else "flat"
+    return {"value": change, "label": f"{abs(change)}%", "direction": direction}
+
+
+def _format_duration(seconds):
+    if seconds is None:
+        return "No data"
+    if seconds < 60:
+        return f"{round(seconds)} sec"
+    if seconds < 3600:
+        return f"{round(seconds / 60)} min"
+    return f"{seconds / 3600:.1f} hr"
+
+
+def _series(rows, start, duration, buckets):
+    bucket_seconds = duration.total_seconds() / buckets
+    counts = [0] * buckets
+    for row in rows:
+        occurred_at = _parse_timestamp(row.get("occurred_at"))
+        if not occurred_at:
+            continue
+        index = int((occurred_at - start).total_seconds() // bucket_seconds)
+        if 0 <= index < buckets:
+            counts[index] += 1
+
+    labels = []
+    for index in range(buckets):
+        point = start + timedelta(seconds=bucket_seconds * index)
+        labels.append(point.strftime("%H:%M") if duration <= timedelta(hours=12) else point.strftime("%d %b"))
+    return labels, counts
+
+
+def _keyword_list(value):
+    return [item.strip().casefold() for item in (value or "").split(",") if item.strip()]
+
+
+def _classify_machine_events(rows, rules):
+    events = []
+    for row in rows:
+        text = " ".join(
+            value for value in (row.get("text_body"), row.get("media_caption")) if value
+        ).casefold()
+        if not text:
+            continue
+        for rule in rules:
+            if rule["pattern"].casefold() not in text:
+                continue
+            event_type = "mention"
+            if any(keyword in text for keyword in _keyword_list(rule["close_keywords"])):
+                event_type = "closed"
+            elif any(keyword in text for keyword in _keyword_list(rule["open_keywords"])):
+                event_type = "opened"
+            events.append(
+                {
+                    "message_id": row["id"],
+                    "machine": rule["machine_name"],
+                    "department": rule["department"] or "Unassigned",
+                    "event_type": event_type,
+                    "occurred_at": row["occurred_at"],
+                    "sender": row.get("sender_name") or row.get("sender_phone") or "Unknown",
+                }
+            )
+    return events
+
+
+def _machine_summary(events):
+    opened = Counter()
+    closed = Counter()
+    active = {}
+    resolution_seconds = []
+    open_times = defaultdict(list)
+
+    for event in events:
+        occurred_at = _parse_timestamp(event["occurred_at"])
+        if not occurred_at:
+            continue
+        machine = event["machine"]
+        if event["event_type"] == "opened":
+            opened[machine] += 1
+            open_times[machine].append(occurred_at)
+            active.setdefault(machine, event)
+        elif event["event_type"] == "closed":
+            closed[machine] += 1
+            if machine in active:
+                started = _parse_timestamp(active[machine]["occurred_at"])
+                if started and occurred_at >= started:
+                    resolution_seconds.append((occurred_at - started).total_seconds())
+                active.pop(machine, None)
+
+    recurrence = [
+        {"machine": machine, "count": count}
+        for machine, count in opened.most_common(8)
+    ]
+    open_intervals = []
+    for times in open_times.values():
+        open_intervals.extend(
+            (current - previous).total_seconds()
+            for previous, current in zip(times, times[1:])
+        )
+
+    return {
+        "opened": sum(opened.values()),
+        "closed": sum(closed.values()),
+        "active": list(active.values()),
+        "recurrence": recurrence,
+        "average_resolution": _format_duration(
+            sum(resolution_seconds) / len(resolution_seconds) if resolution_seconds else None
+        ),
+        "average_open_interval": _format_duration(
+            sum(open_intervals) / len(open_intervals) if open_intervals else None
+        ),
+    }
+
+
+def get_management_dashboard(period="12h", now=None):
+    period, config = _period_config(period)
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    now = now.astimezone(timezone.utc)
+    start = now - config["duration"]
+    previous_start = start - config["duration"]
+    monthly_start = now - PERIODS["30d"]["duration"]
+
+    with get_connection() as conn:
+        current_rows = _period_rows(conn, start, now)
+        previous_rows = _period_rows(conn, previous_start, start)
+        monthly_rows = _period_rows(conn, monthly_start, now)
+        rules = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM machine_rules WHERE enabled = 1 ORDER BY machine_name, pattern"
+            ).fetchall()
+        ]
+        last_message = conn.execute(
+            """
+            SELECT COALESCE(timestamp, created_at) AS occurred_at
+            FROM messages
+            ORDER BY datetime(COALESCE(timestamp, created_at)) DESC, id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    sender_ranking = _rank_rows(current_rows, "sender_phone", "sender_name")
+    group_ranking = _rank_rows(
+        current_rows, "chat_id", "chat_name", groups_only=True
+    )
+    if not group_ranking:
+        group_ranking = _rank_rows(current_rows, "chat_id", "chat_name")
+
+    current_times = [
+        parsed
+        for parsed in (_parse_timestamp(row["occurred_at"]) for row in current_rows)
+        if parsed
+    ]
+    gaps = [
+        (current - previous).total_seconds()
+        for previous, current in zip(current_times, current_times[1:])
+        if current >= previous
+    ]
+    average_gap = sum(gaps) / len(gaps) if gaps else None
+    labels, current_series = _series(
+        current_rows, start, config["duration"], config["buckets"]
+    )
+    _, previous_series = _series(
+        previous_rows, previous_start, config["duration"], config["buckets"]
+    )
+
+    current_machine_events = _classify_machine_events(current_rows, rules)
+    monthly_machine_events = _classify_machine_events(monthly_rows, rules)
+    current_machine_summary = _machine_summary(current_machine_events)
+    monthly_machine_summary = _machine_summary(monthly_machine_events)
+
+    active_senders = len(
+        {
+            row.get("sender_phone") or row.get("sender_name")
+            for row in current_rows
+            if row.get("sender_phone") or row.get("sender_name")
+        }
+    )
+    previous_senders = len(
+        {
+            row.get("sender_phone") or row.get("sender_name")
+            for row in previous_rows
+            if row.get("sender_phone") or row.get("sender_name")
+        }
+    )
+    active_groups = len(
+        {
+            row.get("chat_id") or row.get("chat_name")
+            for row in current_rows
+            if row.get("is_group") and (row.get("chat_id") or row.get("chat_name"))
+        }
+    )
+    previous_groups = len(
+        {
+            row.get("chat_id") or row.get("chat_name")
+            for row in previous_rows
+            if row.get("is_group") and (row.get("chat_id") or row.get("chat_name"))
+        }
+    )
+    period_hours = config["duration"].total_seconds() / 3600
+
+    return {
+        "period": period,
+        "period_label": config["label"],
+        "generated_at": now.isoformat(timespec="seconds"),
+        "last_message_at": last_message["occurred_at"] if last_message else None,
+        "metrics": {
+            "messages": len(current_rows),
+            "active_senders": active_senders,
+            "active_groups": active_groups,
+            "messages_per_hour": round(len(current_rows) / period_hours, 1),
+            "average_gap": _format_duration(average_gap),
+            "message_change": _comparison(len(current_rows), len(previous_rows)),
+            "sender_change": _comparison(active_senders, previous_senders),
+            "group_change": _comparison(active_groups, previous_groups),
+        },
+        "trend": {
+            "labels": labels,
+            "current": current_series,
+            "previous": previous_series,
+        },
+        "top_senders": sender_ranking,
+        "top_groups": group_ranking,
+        "machine_data_available": bool(rules and monthly_machine_events),
+        "machine_rules_count": len(rules),
+        "machine_period": current_machine_summary,
+        "machine_month": monthly_machine_summary,
+    }
+
+
 def list_retention_rules():
     with get_connection() as conn:
         return [
@@ -457,6 +787,64 @@ def set_retention_rule_enabled(rule_id, enabled):
 def delete_retention_rule(rule_id):
     with get_connection() as conn:
         conn.execute("DELETE FROM retention_rules WHERE id = ?", (rule_id,))
+
+
+def list_machine_rules():
+    with get_connection() as conn:
+        return [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT *
+                FROM machine_rules
+                ORDER BY enabled DESC, department ASC, machine_name ASC, pattern ASC
+                """
+            ).fetchall()
+        ]
+
+
+def upsert_machine_rule(
+    machine_name,
+    pattern,
+    department=None,
+    open_keywords=None,
+    close_keywords=None,
+):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO machine_rules (
+                machine_name, department, pattern, open_keywords, close_keywords, enabled, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, 1, ?)
+            ON CONFLICT(machine_name, pattern) DO UPDATE SET
+                department = excluded.department,
+                open_keywords = excluded.open_keywords,
+                close_keywords = excluded.close_keywords,
+                enabled = 1
+            """,
+            (
+                machine_name,
+                department or "",
+                pattern,
+                open_keywords or "open,opened,fault,down,stopped",
+                close_keywords or "close,closed,fixed,resolved,running",
+                now_iso(),
+            ),
+        )
+
+
+def set_machine_rule_enabled(rule_id, enabled):
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE machine_rules SET enabled = ? WHERE id = ?",
+            (1 if enabled else 0, rule_id),
+        )
+
+
+def delete_machine_rule(rule_id):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM machine_rules WHERE id = ?", (rule_id,))
 
 
 def should_store_message(record):

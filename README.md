@@ -122,8 +122,10 @@ Use the value from WHATSAPP_VERIFY_TOKEN in .env
 - `POST /webhook` receives webhook events.
 - `POST /ingest/companion` receives normalized Baileys companion events.
 - `GET /dashboard` opens the browser dashboard.
+- `GET /administration` manages capture and machine classification rules.
 - `GET /messages` shows recent parsed messages.
 - `GET /api/stats` returns JSON stats.
+- `GET /api/management?period=12h` returns management dashboard metrics.
 - `GET /api/messages` returns recent messages as JSON.
 - `GET /export/messages.csv` downloads CSV.
 - `GET /export/messages.json` downloads JSON.
@@ -136,19 +138,22 @@ Open from desktop through the same Cloudflare Tunnel:
 https://xxxxx.trycloudflare.com/dashboard
 ```
 
-The dashboard shows:
+The management dashboard shows:
 
-- Total messages.
-- Messages today.
-- Messages by source: `meta` or `baileys`.
-- Messages by chat/group.
-- Counts for text, image, audio, video, document, and unknown messages.
-- Last webhook received time.
-- Last message received time.
-- Messages by type.
-- Messages by sender.
-- Messages by day.
-- Last 20 messages.
+- Rolling windows for the last 12 hours, 7 days, and 30 days.
+- Message volume compared with the previous equal period.
+- Active people and WhatsApp groups.
+- Message rate and average time between consecutive messages.
+- Message activity trends and ranked people/groups.
+- Optional machine openings, closures, resolution time, and 30-day recurrence.
+- Source freshness and an automatic 12-hour browser refresh.
+
+Machine metrics are never inferred without a rule. Configure auditable text-matching
+rules under `/administration`. Until a rule matches stored messages, the dashboard
+shows an explicit no-data state instead of sample or fabricated values.
+
+Technical filters, exports, retention rules, machine classification, and recent raw
+records live under `/administration`.
 
 ## Storage
 

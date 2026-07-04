@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Administration | Mor Factory Operations</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <h1>Mor Factory Operations <span>Administration</span></h1>
+          <p>Data capture, classification and exports</p>
+        </div>
+      </div>
+      <nav class="topnav" aria-label="Primary">
+        <a href="/dashboard">Overview</a>
+        <a href="/messages">Messages</a>
+        <a class="active" href="/administration">Administration</a>
+      </nav>
+    </header>
+
+    <main class="admin-shell">
+      <section class="admin-heading">
+        <div>
+          <p class="section-kicker">System controls</p>
+          <h2>Administration</h2>
+          <p>Manage source filters, capture rules and auditable machine classification.</p>
+        </div>
+        <div class="admin-actions">
+          <a href="/api/stats">Stats JSON</a>
+          <a href="/export/messages.json">Export JSON</a>
+          <a class="primary-action" href="/export/messages.csv">Export CSV</a>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="panel-heading">
+          <div><h3>Message Filters</h3><p>Filters apply to the record preview and exports.</p></div>
+          <a href="/administration">Clear filters</a>
+        </div>
+        <form class="filter-grid" method="get" action="/administration">
+          <label>Search<input name="q" value="{{ filters.get('q', '') }}" placeholder="Text, sender or group"></label>
+          <label>Source
+            <select name="source">
+              <option value="">All sources</option>
+              {% for source in options.sources %}
+              <option value="{{ source }}" {% if filters.get('source') == source %}selected{% endif %}>{{ source }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Type
+            <select name="message_type">
+              <option value="">All types</option>
+              {% for message_type in options.message_types %}
+              <option value="{{ message_type }}" {% if filters.get('message_type') == message_type %}selected{% endif %}>{{ message_type }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Conversation
+            <select name="kind">
+              <option value="">Groups and direct</option>
+              <option value="groups" {% if filters.get('kind') == 'groups' %}selected{% endif %}>Groups only</option>
+              <option value="direct" {% if filters.get('kind') == 'direct' %}selected{% endif %}>Direct only</option>
+            </select>
+          </label>
+          <label>Group or chat
+            <select name="chat">
+              <option value="">All chats</option>
+              {% for chat in options.chats %}
+              <option value="{{ chat.value }}" {% if filters.get('chat') == chat.value %}selected{% endif %}>{{ chat.label }} ({{ chat.count }})</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Sender
+            <select name="sender">
+              <option value="">All senders</option>
+              {% for sender in options.senders %}
+              <option value="{{ sender.value }}" {% if filters.get('sender') == sender.value %}selected{% endif %}>{{ sender.label }} ({{ sender.count }})</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>From<input type="date" name="date_from" value="{{ filters.get('date_from', '') }}"></label>
+          <label>To<input type="date" name="date_to" value="{{ filters.get('date_to', '') }}"></label>
+          <button type="submit">Apply filters</button>
+        </form>
+      </section>
+
+      <section class="admin-panel" id="machine-rules">
+        <div class="panel-heading">
+          <div>
+            <h3>Machine Classification</h3>
+            <p>Rules match message text. A machine is never inferred unless an enabled rule matches.</p>
+          </div>
+          <span class="data-badge">{{ machine_rules | selectattr('enabled') | list | length }} active</span>
+        </div>
+        <form class="rule-grid machine-rule-grid" method="post" action="/machine-rules">
+          <label>Machine name<input name="machine_name" placeholder="CNC-03" required></label>
+          <label>Department<input name="department" placeholder="Machining"></label>
+          <label>Text pattern<input name="pattern" placeholder="CNC 03" required></label>
+          <label>Opening keywords<input name="open_keywords" placeholder="fault,down,stopped"></label>
+          <label>Closing keywords<input name="close_keywords" placeholder="fixed,resolved,running"></label>
+          <button type="submit">Add rule</button>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Machine</th><th>Department</th><th>Pattern</th><th>Opening</th><th>Closing</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {% for rule in machine_rules %}
+              <tr>
+                <td><strong>{{ rule.machine_name }}</strong></td>
+                <td>{{ rule.department or "Unassigned" }}</td>
+                <td>{{ rule.pattern }}</td>
+                <td class="clip">{{ rule.open_keywords }}</td>
+                <td class="clip">{{ rule.close_keywords }}</td>
+                <td><span class="state-label {{ 'enabled' if rule.enabled else 'paused' }}">{{ "Active" if rule.enabled else "Paused" }}</span></td>
+                <td class="row-actions">
+                  <form method="post" action="/machine-rules/{{ rule.id }}/toggle">
+                    <input type="hidden" name="enabled" value="{{ 0 if rule.enabled else 1 }}">
+                    <button type="submit" class="secondary-button">{{ "Pause" if rule.enabled else "Enable" }}</button>
+                  </form>
+                  <form method="post" action="/machine-rules/{{ rule.id }}/delete">
+                    <button type="submit" class="danger-button">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7">No machine rules configured. Machine-event metrics remain unavailable.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="panel-heading">
+          <div>
+            <h3>History Capture Rules</h3>
+            <p>With no active rules, all messages are stored. Once enabled, only matching chats or senders are kept.</p>
+          </div>
+          <span class="data-badge">{{ retention_rules | selectattr('enabled') | list | length }} active</span>
+        </div>
+        <form class="rule-grid retention-rule-grid" method="post" action="/retention-rules">
+          <label>Rule type
+            <select name="rule_type"><option value="chat">Group or chat</option><option value="sender">Person or sender</option></select>
+          </label>
+          <label>Value<input name="value" placeholder="Chat ID, phone or sender ID" required></label>
+          <label>Label<input name="label" placeholder="Friendly name"></label>
+          <label class="checkbox-field"><input type="checkbox" name="is_group" value="1"><span>Group</span></label>
+          <button type="submit">Add rule</button>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Name</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {% for rule in retention_rules %}
+              <tr>
+                <td>{{ rule.rule_type }}</td>
+                <td><strong>{{ rule.label or rule.value }}</strong></td>
+                <td class="clip">{{ rule.value }}</td>
+                <td><span class="state-label {{ 'enabled' if rule.enabled else 'paused' }}">{{ "Active" if rule.enabled else "Paused" }}</span></td>
+                <td class="row-actions">
+                  <form method="post" action="/retention-rules/{{ rule.id }}/toggle">
+                    <input type="hidden" name="enabled" value="{{ 0 if rule.enabled else 1 }}">
+                    <button type="submit" class="secondary-button">{{ "Pause" if rule.enabled else "Enable" }}</button>
+                  </form>
+                  <form method="post" action="/retention-rules/{{ rule.id }}/delete">
+                    <button type="submit" class="danger-button">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5">No capture rules. All incoming messages are currently stored.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="panel-heading">
+          <div><h3>Recent Records</h3><p>Latest 50 records matching the filters above.</p></div>
+          <a href="/messages">Open full message view</a>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Source</th><th>Group or chat</th><th>Timestamp</th><th>Sender</th><th>Type</th><th>Message</th></tr></thead>
+            <tbody>
+              {% for message in messages %}
+              <tr>
+                <td>{{ message.id }}</td>
+                <td>{{ message.source or "meta" }}</td>
+                <td>{{ message.chat_name or message.chat_id or "Direct" }}</td>
+                <td>{{ message.timestamp or message.created_at }}</td>
+                <td>{{ message.sender_name or message.sender_phone or "Unknown" }}</td>
+                <td>{{ message.message_type or "unknown" }}</td>
+                <td class="clip">{{ message.text_body or message.media_caption or "" }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7">No records match the selected filters.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
