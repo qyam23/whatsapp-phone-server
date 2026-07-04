@@ -10,7 +10,8 @@ This project is a lightweight Android Termux-compatible Flask webhook evidence s
 - Use Flask only.
 - Use Python stdlib `sqlite3`.
 - Keep dependencies lightweight.
-- Do not add FastAPI, pydantic, Celery, Redis, Docker, PostgreSQL, AI, OCR, Whisper, embeddings, LLMs, or Hugging Face models.
+- Do not add FastAPI, pydantic, Celery, Redis, Docker, PostgreSQL, OCR, Whisper, embeddings, or locally hosted Hugging Face models.
+- Optional LLM analysis may use a server-side API only through allowlisted function tools. Models must never receive a database connection or arbitrary SQL execution capability.
 - All secrets must come from `.env`.
 - Never hardcode or print access tokens.
 

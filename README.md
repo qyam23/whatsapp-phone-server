@@ -1,5 +1,12 @@
 # WhatsApp Phone Server
 
+## Windows desktop simulation
+
+For local development without the phone, double-click
+`START_DESKTOP_DEMO.bat`. The simulation runs at
+`http://127.0.0.1:8765`, uses synthetic data, and works without an AI API key.
+See [DESKTOP_DEMO.md](DESKTOP_DEMO.md) for setup and optional API access.
+
 Lightweight Android Termux-compatible WhatsApp Cloud API webhook evidence server.
 
 It receives Meta WhatsApp webhooks, saves every raw payload to disk, parses message records into SQLite, and exposes a browser dashboard that can be opened from a desktop browser through Cloudflare Tunnel.
@@ -122,6 +129,7 @@ Use the value from WHATSAPP_VERIFY_TOKEN in .env
 - `POST /webhook` receives webhook events.
 - `POST /ingest/companion` receives normalized Baileys companion events.
 - `GET /dashboard` opens the browser dashboard.
+- `GET /query` opens the authenticated AI data assistant.
 - `GET /administration` manages capture and machine classification rules.
 - `GET /messages` shows recent parsed messages.
 - `GET /api/stats` returns JSON stats.
@@ -154,6 +162,67 @@ shows an explicit no-data state instead of sample or fabricated values.
 
 Technical filters, exports, retention rules, machine classification, and recent raw
 records live under `/administration`.
+
+## Browser Authentication
+
+Dashboard, query, administration, API, and export routes require a signed-in
+session. Health checks and WhatsApp ingestion routes remain available without a
+browser session.
+
+Generate a password hash on the phone:
+
+```bash
+python scripts/generate_password_hash.py
+```
+
+Generate a Flask signing key:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Add the resulting values to `.env`:
+
+```env
+QUERY_USERNAME=qyam2323
+QUERY_PASSWORD_HASH=<generated-scrypt-hash>
+FLASK_SECRET_KEY=<generated-random-value>
+SESSION_COOKIE_SECURE=1
+```
+
+Do not store a plaintext password or commit `.env`. The login session expires
+after 30 minutes. Five failed login attempts from one client trigger a temporary
+15-minute lockout.
+
+For local HTTP-only testing, set `SESSION_COOKIE_SECURE=0`. Keep it enabled when
+accessing the server through an HTTPS Cloudflare hostname.
+
+## AI Data Assistant
+
+The optional assistant uses the OpenAI Responses API. The model has no arbitrary
+SQL tool and no database connection. It can only request these server-owned,
+read-only operations:
+
+- operations summary
+- top people
+- top groups
+- activity trend
+- machine recurrence
+- up to 30 recent matching messages
+
+Phone numbers and email addresses are redacted from message samples before they
+are sent to the API. Every question, tool name, status, and execution duration is
+recorded locally in `query_audit`.
+
+Configure the API on the phone:
+
+```env
+OPENAI_API_KEY=<server-side-api-key>
+OPENAI_MODEL=gpt-5.4-mini
+```
+
+Never place the API key in HTML, JavaScript, Git, screenshots, or chat messages.
+After changing `.env`, restart Flask.
 
 ## Storage
 

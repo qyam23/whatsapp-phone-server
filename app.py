@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, redirect, request, Response
 from dotenv import load_dotenv
 
+from src.auth import auth_bp, configure_auth
 from src.dashboard import dashboard_bp, request_filters
 from src.db import (
     companion_payload_to_record,
@@ -12,6 +13,7 @@ from src.db import (
     should_store_message,
 )
 from src.parser import parse_whatsapp_messages
+from src.query import query_bp
 from src.storage import save_raw_event
 from src.utils import get_env, now_iso, rows_to_csv
 
@@ -19,7 +21,15 @@ from src.utils import get_env, now_iso, rows_to_csv
 load_dotenv()
 
 app = Flask(__name__)
+configure_auth(app)
+app.register_blueprint(auth_bp)
 app.register_blueprint(dashboard_bp)
+app.register_blueprint(query_bp)
+
+
+@app.context_processor
+def inject_runtime_context():
+    return {"desktop_demo": get_env("DESKTOP_DEMO", "0") == "1"}
 
 
 @app.before_request

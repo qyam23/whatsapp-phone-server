@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import time
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -104,6 +105,16 @@ def init_db():
                 enabled INTEGER DEFAULT 1,
                 created_at TEXT,
                 UNIQUE(machine_name, pattern)
+            );
+
+            CREATE TABLE IF NOT EXISTS query_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                question TEXT,
+                tools_used TEXT,
+                status TEXT NOT NULL,
+                duration_ms INTEGER,
+                created_at TEXT
             );
             """
         )
@@ -745,6 +756,91 @@ def get_management_dashboard(period="12h", now=None):
         "machine_period": current_machine_summary,
         "machine_month": monthly_machine_summary,
     }
+
+
+@contextmanager
+def get_readonly_connection(timeout_seconds=2):
+    database_path = DB_PATH.resolve().as_posix()
+    connection = sqlite3.connect(
+        f"file:{database_path}?mode=ro",
+        uri=True,
+        timeout=1,
+    )
+    connection.row_factory = sqlite3.Row
+    deadline = time.monotonic() + timeout_seconds
+    connection.execute("PRAGMA query_only = ON")
+    connection.set_progress_handler(
+        lambda: 1 if time.monotonic() > deadline else 0,
+        1000,
+    )
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
+def get_query_recent_messages(period="12h", chat=None, search=None, limit=20, now=None):
+    period, config = _period_config(period)
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    start = now.astimezone(timezone.utc) - config["duration"]
+    conditions = [
+        "datetime(COALESCE(timestamp, created_at)) >= datetime(?)",
+        "datetime(COALESCE(timestamp, created_at)) < datetime(?)",
+    ]
+    params = [start.isoformat(), now.isoformat()]
+
+    if chat:
+        conditions.append(
+            "(COALESCE(chat_name, '') LIKE ? OR COALESCE(chat_id, '') LIKE ?)"
+        )
+        params.extend([f"%{chat}%", f"%{chat}%"])
+    if search:
+        conditions.append(
+            "(COALESCE(text_body, '') LIKE ? OR COALESCE(media_caption, '') LIKE ?)"
+        )
+        params.extend([f"%{search}%", f"%{search}%"])
+
+    safe_limit = max(1, min(int(limit), 30))
+    params.append(safe_limit)
+    with get_readonly_connection() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT
+                COALESCE(timestamp, created_at) AS occurred_at,
+                COALESCE(chat_name, chat_id, 'Direct') AS chat,
+                COALESCE(sender_name, 'Unknown') AS sender,
+                COALESCE(message_type, 'unknown') AS message_type,
+                COALESCE(text_body, media_caption, '') AS message
+            FROM messages
+            WHERE {" AND ".join(conditions)}
+            ORDER BY datetime(COALESCE(timestamp, created_at)) DESC, id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return {"period": period, "messages": [dict(row) for row in rows]}
+
+
+def record_query_audit(username, question, tools_used, status, duration_ms):
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO query_audit (
+                username, question, tools_used, status, duration_ms, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                username,
+                (question or "")[:1000],
+                ",".join(tools_used or []),
+                status,
+                int(duration_ms),
+                now_iso(),
+            ),
+        )
 
 
 def list_retention_rules():

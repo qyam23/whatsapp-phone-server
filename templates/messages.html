@@ -17,10 +17,22 @@
       </div>
       <nav class="topnav" aria-label="Primary">
         <a href="/dashboard">Overview</a>
+        <a href="/query">Ask Data</a>
         <a class="active" href="/messages">Messages</a>
         <a href="/administration">Administration</a>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="nav-button" type="submit">Sign out</button>
+        </form>
       </nav>
     </header>
+
+    {% if desktop_demo %}
+    <div class="demo-banner" role="status">
+      <strong>Desktop simulation</strong>
+      <span>Synthetic data only · not connected to the phone</span>
+    </div>
+    {% endif %}
 
     <main class="message-shell">
       <section class="message-heading">

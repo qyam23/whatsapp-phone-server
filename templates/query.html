@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ask the database | Mor Factory Operations</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <h1>Mor Factory Operations <span>Data Assistant</span></h1>
+          <p>Secure, read-only production analysis</p>
+        </div>
+      </div>
+      <nav class="topnav" aria-label="Primary">
+        <a href="/dashboard">Overview</a>
+        <a class="active" href="/query">Ask Data</a>
+        <a href="/messages">Messages</a>
+        <a href="/administration">Administration</a>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="nav-button" type="submit">Sign out</button>
+        </form>
+      </nav>
+    </header>
+
+    {% if desktop_demo %}
+    <div class="demo-banner" role="status">
+      <strong>Desktop simulation</strong>
+      <span>Synthetic data only · not connected to the phone</span>
+    </div>
+    {% endif %}
+
+    <main class="query-shell">
+      <section class="query-heading">
+        <div>
+          <p class="section-kicker">Operations intelligence</p>
+          <h2>Ask the production database</h2>
+          <p>Questions are translated into approved read-only tools. The model cannot execute SQL.</p>
+        </div>
+        <span class="ai-status {{ 'ready' if ai_configured else 'offline' }}">
+          {{ "AI ready" if ai_configured else "API key required" }}
+        </span>
+      </section>
+
+      {% if not ai_configured %}
+      <section class="notice warning-notice">
+        <strong>AI analysis is not configured.</strong>
+        {% if desktop_demo %}
+        <span>Run <code>CONFIGURE_DESKTOP.bat</code>, add an API key, then restart the simulation.</span>
+        {% else %}
+        <span>Add <code>OPENAI_API_KEY</code> to <code>.env</code> on the phone and restart Flask.</span>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <section class="query-layout">
+        <article class="query-console">
+          <form method="post" action="/query">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="question">Question</label>
+            <textarea id="question" name="question" maxlength="1000" rows="5" placeholder="לדוגמה: מי דיבר הכי הרבה ב-12 השעות האחרונות?" required>{{ question }}</textarea>
+            <div class="query-form-footer">
+              <span>Up to 30 relevant messages may be analyzed per request.</span>
+              <button type="submit" {% if not ai_configured %}disabled{% endif %}>Analyze data</button>
+            </div>
+          </form>
+
+          {% if error %}
+          <div class="query-error" role="alert"><strong>Analysis failed</strong><span>{{ error }}</span></div>
+          {% endif %}
+
+          {% if result %}
+          <section class="query-answer" aria-live="polite">
+            <div class="answer-heading">
+              <div><span class="answer-mark">AI</span><strong>Operations answer</strong></div>
+              <span>{{ result.model }}</span>
+            </div>
+            <div class="answer-text" dir="auto">{{ result.answer }}</div>
+            {% if result.tools_used %}
+            <div class="tool-trace">
+              <span>Approved tools used:</span>
+              {% for tool in result.tools_used %}<code>{{ tool }}</code>{% endfor %}
+            </div>
+            {% endif %}
+          </section>
+          {% endif %}
+        </article>
+
+        <aside class="query-sidebar">
+          <h3>Suggested questions</h3>
+          <p>Use these as a starting point.</p>
+          {% set suggestions = [
+            "מי דיבר הכי הרבה ב-12 השעות האחרונות?",
+            "איזו קבוצת ייצור הייתה הפעילה ביותר השבוע?",
+            "סכם את מגמת הפעילות ב-30 הימים האחרונים.",
+            "אילו מכונות הציגו את החזרתיות הגבוהה ביותר החודש?",
+            "מהם הנושאים המרכזיים בהודעות של 12 השעות האחרונות?"
+          ] %}
+          <div class="suggestion-list">
+            {% for suggestion in suggestions %}
+            <form method="post" action="/query">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="question" value="{{ suggestion }}">
+              <button type="submit" {% if not ai_configured %}disabled{% endif %}>{{ suggestion }}</button>
+            </form>
+            {% endfor %}
+          </div>
+          <div class="privacy-note">
+            <strong>Data boundary</strong>
+            <span>Only tool results are sent to the model. Phone numbers and email addresses are redacted from message samples.</span>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

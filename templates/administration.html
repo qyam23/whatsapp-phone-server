@@ -17,10 +17,22 @@
       </div>
       <nav class="topnav" aria-label="Primary">
         <a href="/dashboard">Overview</a>
+        <a href="/query">Ask Data</a>
         <a href="/messages">Messages</a>
         <a class="active" href="/administration">Administration</a>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="nav-button" type="submit">Sign out</button>
+        </form>
       </nav>
     </header>
+
+    {% if desktop_demo %}
+    <div class="demo-banner" role="status">
+      <strong>Desktop simulation</strong>
+      <span>Synthetic data only · not connected to the phone</span>
+    </div>
+    {% endif %}
 
     <main class="admin-shell">
       <section class="admin-heading">
@@ -97,6 +109,7 @@
           <span class="data-badge">{{ machine_rules | selectattr('enabled') | list | length }} active</span>
         </div>
         <form class="rule-grid machine-rule-grid" method="post" action="/machine-rules">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label>Machine name<input name="machine_name" placeholder="CNC-03" required></label>
           <label>Department<input name="department" placeholder="Machining"></label>
           <label>Text pattern<input name="pattern" placeholder="CNC 03" required></label>
@@ -118,10 +131,12 @@
                 <td><span class="state-label {{ 'enabled' if rule.enabled else 'paused' }}">{{ "Active" if rule.enabled else "Paused" }}</span></td>
                 <td class="row-actions">
                   <form method="post" action="/machine-rules/{{ rule.id }}/toggle">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="enabled" value="{{ 0 if rule.enabled else 1 }}">
                     <button type="submit" class="secondary-button">{{ "Pause" if rule.enabled else "Enable" }}</button>
                   </form>
                   <form method="post" action="/machine-rules/{{ rule.id }}/delete">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="danger-button">Delete</button>
                   </form>
                 </td>
@@ -143,6 +158,7 @@
           <span class="data-badge">{{ retention_rules | selectattr('enabled') | list | length }} active</span>
         </div>
         <form class="rule-grid retention-rule-grid" method="post" action="/retention-rules">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label>Rule type
             <select name="rule_type"><option value="chat">Group or chat</option><option value="sender">Person or sender</option></select>
           </label>
@@ -163,10 +179,12 @@
                 <td><span class="state-label {{ 'enabled' if rule.enabled else 'paused' }}">{{ "Active" if rule.enabled else "Paused" }}</span></td>
                 <td class="row-actions">
                   <form method="post" action="/retention-rules/{{ rule.id }}/toggle">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="enabled" value="{{ 0 if rule.enabled else 1 }}">
                     <button type="submit" class="secondary-button">{{ "Pause" if rule.enabled else "Enable" }}</button>
                   </form>
                   <form method="post" action="/retention-rules/{{ rule.id }}/delete">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="danger-button">Delete</button>
                   </form>
                 </td>

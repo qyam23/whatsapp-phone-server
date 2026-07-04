@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in | Mor Factory Operations</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body class="login-page">
+    {% if desktop_demo %}
+    <div class="demo-banner" role="status">
+      <strong>Desktop simulation</strong>
+      <span>Synthetic data only · not connected to the phone</span>
+    </div>
+    {% endif %}
+    <main class="login-shell">
+      <section class="login-brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <p>Mor Factory</p>
+        <h1>Operations intelligence for Sderot production teams.</h1>
+      </section>
+      <section class="login-panel">
+        <p class="section-kicker">Restricted access</p>
+        <h2>Sign in</h2>
+        {% if configured %}
+        <p>Use your operations account to access production data.</p>
+        {% if error %}<div class="form-error" role="alert">{{ error }}</div>{% endif %}
+        <form method="post" action="/login">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ next_url }}">
+          <label>Username<input name="username" autocomplete="username" required autofocus></label>
+          <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+          <button type="submit">Sign in</button>
+        </form>
+        {% else %}
+        <div class="setup-notice">
+          <strong>Authentication setup required</strong>
+          <p>Set <code>QUERY_USERNAME</code>, <code>QUERY_PASSWORD_HASH</code> and <code>FLASK_SECRET_KEY</code> in <code>.env</code>, then restart the server.</p>
+        </div>
+        {% endif %}
+      </section>
+    </main>
+  </body>
+</html>
