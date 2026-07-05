@@ -163,13 +163,27 @@
         </div>
         <form class="rule-grid retention-rule-grid" method="post" action="/retention-rules">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label>Rule type
-            <select name="rule_type"><option value="chat">Group or chat</option><option value="sender">Person or sender</option></select>
+          <label>Group or person
+            <select name="rule_selection" required>
+              <option value="">Choose from known conversations</option>
+              <optgroup label="Groups">
+                {% for chat in options.chats if chat.is_group %}
+                <option value="chat:{{ chat.value }}">{{ chat.label }} ({{ chat.count }})</option>
+                {% else %}
+                <option value="" disabled>No groups found yet</option>
+                {% endfor %}
+              </optgroup>
+              <optgroup label="People">
+                {% for sender in options.senders %}
+                <option value="sender:{{ sender.value }}">{{ sender.label }} ({{ sender.count }})</option>
+                {% else %}
+                <option value="" disabled>No people found yet</option>
+                {% endfor %}
+              </optgroup>
+            </select>
           </label>
-          <label>Value<input name="value" placeholder="Chat ID, phone or sender ID" required></label>
-          <label>Label<input name="label" placeholder="Friendly name"></label>
-          <label class="checkbox-field"><input type="checkbox" name="is_group" value="1"><span>Group</span></label>
-          <button type="submit">Add rule</button>
+          <p class="field-help">The name and identifier are taken from stored WhatsApp records.</p>
+          <button type="submit">Add capture rule</button>
         </form>
         <div class="table-wrap">
           <table>

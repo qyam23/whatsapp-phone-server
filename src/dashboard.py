@@ -86,10 +86,29 @@ def api_messages():
 
 @dashboard_bp.post("/retention-rules")
 def add_retention_rule():
-    rule_type = request.form.get("rule_type", "").strip()
-    value = request.form.get("value", "").strip()
-    label = request.form.get("label", "").strip()
-    is_group = request.form.get("is_group") == "1"
+    selection = request.form.get("rule_selection", "").strip()
+    if selection:
+        rule_type, separator, value = selection.partition(":")
+        options = get_filter_options()
+        candidates = (
+            [chat for chat in options["chats"] if chat["is_group"]]
+            if rule_type == "chat"
+            else options["senders"] if rule_type == "sender" else []
+        )
+        selected = next(
+            (candidate for candidate in candidates if candidate["value"] == value),
+            None,
+        )
+        if not separator or selected is None:
+            return redirect(url_for("dashboard.administration"))
+        label = selected["label"]
+        is_group = rule_type == "chat"
+    else:
+        # Keep compatibility with existing form/API clients.
+        rule_type = request.form.get("rule_type", "").strip()
+        value = request.form.get("value", "").strip()
+        label = request.form.get("label", "").strip()
+        is_group = request.form.get("is_group") == "1"
 
     if rule_type in {"chat", "sender"} and value:
         upsert_retention_rule(rule_type, value, label=label, is_group=is_group)

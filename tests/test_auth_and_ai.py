@@ -91,6 +91,43 @@ class AuthAndAIQueryTests(unittest.TestCase):
         )
         self.assertEqual(invalid.status_code, 400)
 
+    def test_capture_rule_can_be_selected_from_known_group_dropdown(self):
+        db.insert_message(
+            {
+                "source": "baileys",
+                "chat_id": "factory-group@g.us",
+                "chat_name": "Factory Maintenance",
+                "is_group": 1,
+                "group_id": "factory-group@g.us",
+                "whatsapp_message_id": "known-group-1",
+                "sender_phone": "demo-sender",
+                "sender_name": "Demo Operator",
+                "timestamp": "2026-07-05T08:00:00+00:00",
+                "message_type": "text",
+                "text_body": "Maintenance update",
+            }
+        )
+
+        page = self.client.get("/administration")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Factory Maintenance (1)", page.data)
+        self.assertIn(b"chat:factory-group@g.us", page.data)
+
+        response = self.client.post(
+            "/retention-rules",
+            data={
+                "csrf_token": self._csrf(),
+                "rule_selection": "chat:factory-group@g.us",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        rules = db.list_retention_rules()
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0]["rule_type"], "chat")
+        self.assertEqual(rules[0]["value"], "factory-group@g.us")
+        self.assertEqual(rules[0]["label"], "Factory Maintenance")
+        self.assertEqual(rules[0]["is_group"], 1)
+
     def test_baileys_ingestion_remains_open_without_login(self):
         response = self.client.post(
             "/ingest/companion",
