@@ -81,6 +81,12 @@ class HistoricalBaselineTests(unittest.TestCase):
 
     def test_historical_dashboard_administration_and_apis_are_open(self):
         self._import_seed()
+        db.upsert_retention_rule(
+            "chat",
+            "live-validation",
+            label="Live validation",
+            is_group=0,
+        )
 
         dashboard = self.client.get("/dashboard")
         self.assertEqual(dashboard.status_code, 200)

@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, url_fo
 from src.db import (
     delete_machine_rule,
     delete_retention_rule,
+    get_active_retention_scope,
     get_filter_options,
     get_historical_actions,
     get_historical_admin_data,
@@ -60,6 +61,7 @@ def administration():
         filters=filters,
         options=get_filter_options(),
         retention_rules=list_retention_rules(),
+        retention_scope=get_active_retention_scope(),
         machine_rules=list_machine_rules(),
         historical=get_historical_admin_data(),
     )

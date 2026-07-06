@@ -163,6 +163,19 @@ shows an explicit no-data state instead of sample or fabricated values.
 Technical filters, exports, retention rules, machine classification, and recent raw
 records live under `/administration`.
 
+### Live monitored scope
+
+When one or more retention rules are active, every live dashboard period, ranking,
+machine calculation, operational API, message list, AI sample, and export is
+limited to messages matching those chats/groups/senders. Active rules are combined
+with OR; URL/search filters are then applied with AND.
+
+With no active retention rules, live views fall back to all messages. The
+Administration `Clear filters` action clears temporary search controls only. To
+return the live dashboard to all messages, pause or delete every retention rule.
+Historical baseline data remains fixed and is never filtered by live retention
+rules.
+
 ## Mor / McGuyver Historical Baseline
 
 Prepared historical evidence is stored in separate `historical_*` tables. It is

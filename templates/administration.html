@@ -247,6 +247,18 @@
           </div>
           <span class="data-badge">{{ retention_rules | selectattr('enabled') | list | length }} active</span>
         </div>
+        <div class="scope-status {{ 'filtered' if retention_scope.filtered else '' }}">
+          <strong>{{ retention_scope.label }}</strong>
+          {% if retention_scope.filtered %}
+          <span>
+            {% for rule in retention_scope.rules %}
+            {{ rule.label or rule.value }}{% if not loop.last %} · {% endif %}
+            {% endfor %}
+          </span>
+          {% else %}
+          <span>Enable a capture rule to limit live operational metrics.</span>
+          {% endif %}
+        </div>
         <form class="rule-grid retention-rule-grid" method="post" action="/retention-rules">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label>Group or person

@@ -44,6 +44,10 @@
         <div>
           <p class="section-kicker">Executive overview</p>
           <h2>Production communication pulse</h2>
+          <p class="live-scope-label {{ 'filtered' if dashboard.live_scope.filtered else '' }}">
+            <span class="status-dot" aria-hidden="true"></span>
+            {{ dashboard.live_scope.label }}
+          </p>
         </div>
         <div class="toolbar-controls">
           <div class="period-tabs" aria-label="Time period">

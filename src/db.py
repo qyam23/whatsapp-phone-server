@@ -247,11 +247,144 @@ def insert_companion_message(payload):
     return insert_message(companion_payload_to_record(payload))
 
 
-def _message_filters_where(filters=None):
+def _active_scope_from_connection(connection):
+    rules = [
+        dict(row)
+        for row in connection.execute(
+            """
+            SELECT id, rule_type, value, label, COALESCE(is_group, 0) AS is_group
+            FROM retention_rules
+            WHERE enabled = 1
+            ORDER BY rule_type, label, value
+            """
+        ).fetchall()
+    ]
+    filtered = bool(rules)
+    return {
+        "filtered": filtered,
+        "active_count": len(rules),
+        "label": (
+            "Live data filtered by monitored chats/groups/senders"
+            if filtered
+            else "Live data: all messages"
+        ),
+        "rules": rules,
+    }
+
+
+def get_active_retention_scope(connection=None):
+    if connection is not None:
+        return _active_scope_from_connection(connection)
+    with get_connection() as connection:
+        return _active_scope_from_connection(connection)
+
+
+def _allows_name_fallback(rule):
+    value = str(rule.get("value") or "").strip()
+    label = str(rule.get("label") or "").strip()
+    return not label or value.casefold() == label.casefold()
+
+
+def message_matches_active_scope(record, scope=None):
+    scope = scope or get_active_retention_scope()
+    if not scope["filtered"]:
+        return True
+
+    is_group = bool(record.get("is_group"))
+    for rule in scope["rules"]:
+        if rule.get("is_group") and not is_group:
+            continue
+
+        value = str(rule.get("value") or "").strip()
+        if rule["rule_type"] == "chat":
+            stable_values = {
+                str(item).strip()
+                for item in (
+                    record.get("chat_id"),
+                    record.get("group_id"),
+                    record.get("display_phone_number"),
+                )
+                if item
+            }
+            if value in stable_values:
+                return True
+            if _allows_name_fallback(rule) and value.casefold() == str(
+                record.get("chat_name") or ""
+            ).strip().casefold():
+                return True
+
+        if rule["rule_type"] == "sender":
+            if value == str(record.get("sender_phone") or "").strip():
+                return True
+            if _allows_name_fallback(rule) and value.casefold() == str(
+                record.get("sender_name") or ""
+            ).strip().casefold():
+                return True
+
+    return False
+
+
+def _scope_column(alias, column):
+    return f"{alias}.{column}" if alias else column
+
+
+def build_live_scope_where_clause(scope=None, table_alias=None):
+    scope = scope or get_active_retention_scope()
+    if not scope["filtered"]:
+        return "", []
+
+    rule_conditions = []
+    params = []
+    for rule in scope["rules"]:
+        value = str(rule.get("value") or "").strip()
+        matches = []
+        match_params = []
+
+        if rule["rule_type"] == "chat":
+            for column in ("chat_id", "group_id", "display_phone_number"):
+                matches.append(f"COALESCE({_scope_column(table_alias, column)}, '') = ?")
+                match_params.append(value)
+            if _allows_name_fallback(rule):
+                matches.append(
+                    f"COALESCE({_scope_column(table_alias, 'chat_name')}, '') = ? COLLATE NOCASE"
+                )
+                match_params.append(value)
+        elif rule["rule_type"] == "sender":
+            matches.append(
+                f"COALESCE({_scope_column(table_alias, 'sender_phone')}, '') = ?"
+            )
+            match_params.append(value)
+            if _allows_name_fallback(rule):
+                matches.append(
+                    f"COALESCE({_scope_column(table_alias, 'sender_name')}, '') = ? COLLATE NOCASE"
+                )
+                match_params.append(value)
+        else:
+            continue
+
+        rule_sql = f"({' OR '.join(matches)})"
+        if rule.get("is_group"):
+            rule_sql = (
+                f"(COALESCE({_scope_column(table_alias, 'is_group')}, 0) = 1 "
+                f"AND {rule_sql})"
+            )
+        rule_conditions.append(rule_sql)
+        params.extend(match_params)
+
+    if not rule_conditions:
+        return "0 = 1", []
+    return f"({' OR '.join(rule_conditions)})", params
+
+
+def _message_filters_where(filters=None, scope=None):
     filters = filters or {}
     conditions = []
     params = []
 
+    scope_sql, scope_params = build_live_scope_where_clause(scope=scope)
+    if scope_sql:
+        conditions.append(scope_sql)
+        params.extend(scope_params)
     if filters.get("source"):
         conditions.append("COALESCE(source, 'meta') = ?")
         params.append(filters["source"])
@@ -294,13 +427,13 @@ def _message_filters_where(filters=None):
 
 
 def list_messages(limit=20, filters=None):
-    where_sql, params = _message_filters_where(filters)
-    query = f"SELECT * FROM messages{where_sql} ORDER BY COALESCE(timestamp, created_at) DESC, id DESC"
-    if limit is not None:
-        query += " LIMIT ?"
-        params.append(limit)
-
     with get_connection() as conn:
+        scope = get_active_retention_scope(conn)
+        where_sql, params = _message_filters_where(filters, scope=scope)
+        query = f"SELECT * FROM messages{where_sql} ORDER BY COALESCE(timestamp, created_at) DESC, id DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
         return [dict(row) for row in conn.execute(query, params).fetchall()]
 
 
@@ -363,8 +496,9 @@ def get_filter_options():
 
 
 def get_stats(filters=None):
-    where_sql, params = _message_filters_where(filters)
     with get_connection() as conn:
+        scope = get_active_retention_scope(conn)
+        where_sql, params = _message_filters_where(filters, scope=scope)
         total_messages = conn.execute(
             f"SELECT COUNT(*) FROM messages{where_sql}", params
         ).fetchone()[0]
@@ -476,6 +610,11 @@ def get_stats(filters=None):
         "messages_by_type": by_type,
         "messages_by_sender": by_sender,
         "messages_by_day": by_day,
+        "live_scope": {
+            "filtered": scope["filtered"],
+            "active_count": scope["active_count"],
+            "label": scope["label"],
+        },
     }
 
 
@@ -495,11 +634,13 @@ def _period_config(period):
     return period if period in PERIODS else "12h", PERIODS.get(period, PERIODS["12h"])
 
 
-def _period_rows(conn, start, end):
+def _period_rows(conn, start, end, scope):
+    scope_sql, scope_params = build_live_scope_where_clause(scope=scope)
+    scope_filter = f" AND {scope_sql}" if scope_sql else ""
     return [
         dict(row)
         for row in conn.execute(
-            """
+            f"""
             SELECT
                 id,
                 COALESCE(timestamp, created_at) AS occurred_at,
@@ -514,9 +655,10 @@ def _period_rows(conn, start, end):
             FROM messages
             WHERE datetime(COALESCE(timestamp, created_at)) >= datetime(?)
               AND datetime(COALESCE(timestamp, created_at)) < datetime(?)
+              {scope_filter}
             ORDER BY datetime(COALESCE(timestamp, created_at)) ASC, id ASC
             """,
-            (start.isoformat(), end.isoformat()),
+            (start.isoformat(), end.isoformat(), *scope_params),
         ).fetchall()
     ]
 
@@ -673,22 +815,27 @@ def get_management_dashboard(period="12h", now=None):
     monthly_start = now - PERIODS["30d"]["duration"]
 
     with get_connection() as conn:
-        current_rows = _period_rows(conn, start, now)
-        previous_rows = _period_rows(conn, previous_start, start)
-        monthly_rows = _period_rows(conn, monthly_start, now)
+        scope = get_active_retention_scope(conn)
+        current_rows = _period_rows(conn, start, now, scope)
+        previous_rows = _period_rows(conn, previous_start, start, scope)
+        monthly_rows = _period_rows(conn, monthly_start, now, scope)
         rules = [
             dict(row)
             for row in conn.execute(
                 "SELECT * FROM machine_rules WHERE enabled = 1 ORDER BY machine_name, pattern"
             ).fetchall()
         ]
+        scope_sql, scope_params = build_live_scope_where_clause(scope=scope)
+        scope_where = f"WHERE {scope_sql}" if scope_sql else ""
         last_message = conn.execute(
-            """
+            f"""
             SELECT COALESCE(timestamp, created_at) AS occurred_at
             FROM messages
+            {scope_where}
             ORDER BY datetime(COALESCE(timestamp, created_at)) DESC, id DESC
             LIMIT 1
-            """
+            """,
+            scope_params,
         ).fetchone()
 
     sender_ranking = _rank_rows(current_rows, "sender_phone", "sender_name")
@@ -777,6 +924,11 @@ def get_management_dashboard(period="12h", now=None):
         "machine_rules_count": len(rules),
         "machine_period": current_machine_summary,
         "machine_month": monthly_machine_summary,
+        "live_scope": {
+            "filtered": scope["filtered"],
+            "active_count": scope["active_count"],
+            "label": scope["label"],
+        },
     }
 
 
@@ -824,9 +976,14 @@ def get_query_recent_messages(period="12h", chat=None, search=None, limit=20, no
         )
         params.extend([f"%{search}%", f"%{search}%"])
 
-    safe_limit = max(1, min(int(limit), 30))
-    params.append(safe_limit)
     with get_readonly_connection() as connection:
+        scope = get_active_retention_scope(connection)
+        scope_sql, scope_params = build_live_scope_where_clause(scope=scope)
+        if scope_sql:
+            conditions.append(scope_sql)
+            params.extend(scope_params)
+        safe_limit = max(1, min(int(limit), 30))
+        params.append(safe_limit)
         rows = connection.execute(
             f"""
             SELECT
@@ -967,33 +1124,8 @@ def delete_machine_rule(rule_id):
 
 def should_store_message(record):
     with get_connection() as conn:
-        rules = [
-            dict(row)
-            for row in conn.execute(
-                "SELECT rule_type, value FROM retention_rules WHERE enabled = 1"
-            ).fetchall()
-        ]
-
-    if not rules:
-        return True
-
-    chat_values = {
-        record.get("chat_id"),
-        record.get("group_id"),
-        record.get("display_phone_number"),
-    }
-    sender_values = {
-        record.get("sender_phone"),
-        record.get("sender_name"),
-    }
-
-    for rule in rules:
-        if rule["rule_type"] == "chat" and rule["value"] in chat_values:
-            return True
-        if rule["rule_type"] == "sender" and rule["value"] in sender_values:
-            return True
-
-    return False
+        scope = get_active_retention_scope(conn)
+    return message_matches_active_scope(record, scope=scope)
 
 
 def get_historical_machines(limit=50):

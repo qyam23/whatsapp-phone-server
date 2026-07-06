@@ -606,6 +606,20 @@ button:disabled {
   font-size: clamp(1.45rem, 2.4vw, 2rem);
 }
 
+.live-scope-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.live-scope-label.filtered {
+  color: var(--green);
+}
+
 .toolbar-controls {
   display: flex;
   align-items: center;
@@ -1233,6 +1247,30 @@ button:disabled {
 
 .retention-rule-grid {
   grid-template-columns: minmax(280px, 2fr) minmax(220px, 1fr) auto;
+}
+
+.scope-status {
+  border-left: 3px solid #9aa59e;
+  background: var(--surface-soft);
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+
+.scope-status.filtered {
+  border-left-color: var(--green);
+  background: var(--green-soft);
+}
+
+.scope-status strong {
+  font-size: 0.78rem;
+}
+
+.scope-status span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .filter-grid label,
