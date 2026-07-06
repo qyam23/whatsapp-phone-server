@@ -52,6 +52,92 @@
         </div>
       </section>
 
+      <section class="admin-panel" id="historical-administration">
+        <div class="panel-heading">
+          <div>
+            <h3>Historical Baseline</h3>
+            <p>Mor / McGuyver source provenance, imported rows and execution status.</p>
+          </div>
+          {% if historical.last_import %}
+          <span class="data-badge {{ 'muted' if historical.last_import.status not in ['completed', 'dry_run'] else '' }}">
+            {{ historical.last_import.status }}
+          </span>
+          {% else %}
+          <span class="data-badge muted">Not imported</span>
+          {% endif %}
+        </div>
+
+        <div class="historical-admin-links">
+          <a href="/dashboard#historical-baseline">View historical machines</a>
+          <a href="/api/historical/faults">View fault families</a>
+          <a href="/api/historical/actions">View action plan</a>
+        </div>
+
+        <div class="historical-count-grid" aria-label="Historical table row counts">
+          {% for table, count in historical.counts.items() %}
+          <div><strong>{{ count }}</strong><span>{{ table | replace('historical_', '') | replace('_', ' ') }}</span></div>
+          {% endfor %}
+        </div>
+
+        <div class="historical-admin-grid">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Source</th><th>Type</th><th>Reports</th><th>Updated</th></tr></thead>
+              <tbody>
+                {% for source in historical.sources %}
+                <tr>
+                  <td><strong>{{ source.source_file }}</strong></td>
+                  <td>{{ source.source_type }}</td>
+                  <td>{{ source.report_count }}</td>
+                  <td>{{ source.updated_at }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">No historical sources imported.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Report</th><th>Period</th><th>Confidence</th><th>Source</th></tr></thead>
+              <tbody>
+                {% for report in historical.reports %}
+                <tr>
+                  <td><strong>{{ report.title }}</strong></td>
+                  <td>{{ report.period_start or "Unknown" }} to {{ report.period_end or "Unknown" }}</td>
+                  <td>{{ report.confidence_level or "Unknown" }}</td>
+                  <td>{{ report.source_file }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">No historical reports imported.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-wrap historical-runs">
+          <table>
+            <thead><tr><th>Started</th><th>Status</th><th>Dry run</th><th>Inserted</th><th>Updated</th><th>Skipped</th><th>Errors</th></tr></thead>
+            <tbody>
+              {% for run in historical.import_runs %}
+              <tr>
+                <td>{{ run.started_at }}</td>
+                <td>{{ run.status }}</td>
+                <td>{{ "Yes" if run.dry_run else "No" }}</td>
+                <td>{{ run.inserted_count }}</td>
+                <td>{{ run.updated_count }}</td>
+                <td>{{ run.skipped_count }}</td>
+                <td>{{ run.error_count }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7">No historical import runs recorded.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="admin-panel">
         <div class="panel-heading">
           <div><h3>Message Filters</h3><p>Filters apply to the record preview and exports.</p></div>

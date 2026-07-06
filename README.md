@@ -163,6 +163,36 @@ shows an explicit no-data state instead of sample or fabricated values.
 Technical filters, exports, retention rules, machine classification, and recent raw
 records live under `/administration`.
 
+## Mor / McGuyver Historical Baseline
+
+Prepared historical evidence is stored in separate `historical_*` tables. It is
+never inserted into the live `messages` table and does not inflate WhatsApp
+message, sender, group, frequency, or timing metrics.
+
+Import and validate:
+
+```bash
+python scripts/import_historical_seed.py \
+  seeds/mor_mcguyver_historical_seed_initial.json \
+  --backup-first \
+  --strict
+python scripts/validate_historical_db.py
+```
+
+The dashboard shows a separate historical machine/fault section. Administration
+shows source provenance, report coverage, table counts, and import-run status.
+
+Read-only routes:
+
+- `GET /api/historical/summary`
+- `GET /api/historical/sources`
+- `GET /api/historical/machines`
+- `GET /api/historical/faults`
+- `GET /api/historical/actions`
+
+See `docs/HISTORICAL_BASELINE.md` and
+`docs/HISTORICAL_FIELD_DICTIONARY.md` for the complete workflow and field map.
+
 ## Dashboard and AI Authentication
 
 Normal operations are open immediately after startup. No login or authentication

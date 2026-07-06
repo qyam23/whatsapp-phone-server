@@ -4,6 +4,12 @@ from src.db import (
     delete_machine_rule,
     delete_retention_rule,
     get_filter_options,
+    get_historical_actions,
+    get_historical_admin_data,
+    get_historical_faults,
+    get_historical_machines,
+    get_historical_sources,
+    get_historical_summary,
     get_management_dashboard,
     get_stats,
     list_machine_rules,
@@ -40,6 +46,7 @@ def dashboard():
     return render_template(
         "dashboard.html",
         dashboard=get_management_dashboard(period=period),
+        historical=get_historical_summary(),
     )
 
 
@@ -54,6 +61,7 @@ def administration():
         options=get_filter_options(),
         retention_rules=list_retention_rules(),
         machine_rules=list_machine_rules(),
+        historical=get_historical_admin_data(),
     )
 
 
@@ -82,6 +90,31 @@ def api_management():
 @dashboard_bp.get("/api/messages")
 def api_messages():
     return jsonify({"messages": list_messages(limit=100, filters=request_filters())})
+
+
+@dashboard_bp.get("/api/historical/summary")
+def api_historical_summary():
+    return jsonify(get_historical_summary())
+
+
+@dashboard_bp.get("/api/historical/sources")
+def api_historical_sources():
+    return jsonify({"sources": get_historical_sources()})
+
+
+@dashboard_bp.get("/api/historical/machines")
+def api_historical_machines():
+    return jsonify({"machines": get_historical_machines()})
+
+
+@dashboard_bp.get("/api/historical/faults")
+def api_historical_faults():
+    return jsonify({"faults": get_historical_faults()})
+
+
+@dashboard_bp.get("/api/historical/actions")
+def api_historical_actions():
+    return jsonify({"actions": get_historical_actions()})
 
 
 @dashboard_bp.post("/retention-rules")

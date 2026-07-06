@@ -1,0 +1,12 @@
+﻿fault_family_key,fault_family,occurrence_count,open_events,severity_max,machines
+cooling_chiller_water,קירור / מים / מזגן,5,2,4,"Comexi דפוס, ווטרליין"
+electrical_control,חשמל / בקרה / מסך,5,4,4,"Treater / Corona, אמבוס, דליה"
+gap_receiving_alignment,GAP / קבלה / מקבילות,12,3,3,"קו 3, קו 4, קו 5, קו 6"
+maintenance_general,קריאת אחזקה כללית,5,3,4,קו 3
+pneumatics_air,פנאומטיקה / אוויר,2,0,1,קו 7
+printing_comexi,דפוס / Comexi,5,0,4,"Comexi דפוס, דפוס / פרינטקס"
+screw_feeding,בורג / מינון / הזנה,10,5,4,"חומר פלסטו, סילו 6, קו 2, קו 4, קו 7"
+slitter_sensor_cutting,סליטר / עין / חיתוך,2,1,3,"סליטר 1, סליטר 3"
+status_update,סטטוס טיפול,6,0,2,
+treater_corona_surface,Treater / Corona / שריטות,3,1,2,"Treater / Corona, Treater 3, Treater 4"
+vacuum,ואקום / הזנה,4,2,3,"חומר פלסטו, קו 7, קווים 9-10"

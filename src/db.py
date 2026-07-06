@@ -10,6 +10,21 @@ from src.utils import now_iso
 
 
 DB_PATH = Path(os.getenv("WHATSAPP_DB_PATH", str(Path("data") / "messages.db")))
+ROOT_DIR = Path(__file__).resolve().parents[1]
+HISTORICAL_MIGRATION = ROOT_DIR / "migrations" / "001_historical_baseline.sql"
+HISTORICAL_TABLES = (
+    "historical_sources",
+    "historical_reports",
+    "historical_kpis",
+    "historical_machine_metrics",
+    "historical_fault_families",
+    "historical_action_plan",
+    "historical_insights",
+    "historical_events",
+    "historical_monthly_load",
+    "historical_fault_heatmap",
+    "historical_import_runs",
+)
 PERIODS = {
     "12h": {"label": "Last 12 Hours", "duration": timedelta(hours=12), "buckets": 12},
     "7d": {"label": "Last 7 Days", "duration": timedelta(days=7), "buckets": 7},
@@ -22,6 +37,8 @@ def get_connection():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
         yield conn
         conn.commit()
@@ -119,6 +136,7 @@ def init_db():
             """
         )
         _ensure_message_columns(conn)
+        _ensure_historical_schema(conn)
 
 
 def _ensure_message_columns(conn):
@@ -137,6 +155,10 @@ def _ensure_message_columns(conn):
     for column, statement in migrations.items():
         if column not in existing:
             conn.execute(statement)
+
+
+def _ensure_historical_schema(conn):
+    conn.executescript(HISTORICAL_MIGRATION.read_text(encoding="utf-8"))
 
 
 def insert_webhook_event(event_type, raw_json_path, received_at):
@@ -972,3 +994,226 @@ def should_store_message(record):
             return True
 
     return False
+
+
+def get_historical_machines(limit=50):
+    safe_limit = max(1, min(int(limit), 200))
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                machine_key,
+                machine,
+                COALESCE(department, 'Unassigned') AS department,
+                CAST(COALESCE(metric_value, 0) AS INTEGER) AS event_count,
+                COALESCE(downtime_count, 0) AS downtime_count,
+                COALESCE(quality_risk_count, 0) AS quality_risk_count,
+                COALESCE(recurrence_score, 0) AS recurrence_score,
+                COALESCE(severity, '0') AS severity,
+                confidence_level,
+                period_start,
+                period_end
+            FROM historical_machine_metrics
+            ORDER BY event_count DESC, downtime_count DESC, machine ASC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_historical_faults(limit=50):
+    safe_limit = max(1, min(int(limit), 200))
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                fault.fault_family,
+                COALESCE(fault.occurrence_count, 0) AS occurrence_count,
+                COALESCE(event_machines.machines_affected, 0) AS machines_affected,
+                COALESCE(fault.downtime_count, 0) AS downtime_count,
+                COALESCE(fault.quality_risk_count, 0) AS quality_risk_count,
+                COALESCE(fault.recurrence_score, 0) AS recurrence_score,
+                COALESCE(fault.severity, '0') AS severity,
+                fault.confidence_level,
+                fault.source_quote_or_summary
+            FROM historical_fault_families AS fault
+            LEFT JOIN (
+                SELECT fault_family, COUNT(DISTINCT machine_key) AS machines_affected
+                FROM historical_events
+                WHERE machine_key IS NOT NULL AND machine_key != ''
+                GROUP BY fault_family
+            ) AS event_machines
+                ON event_machines.fault_family = fault.fault_family
+            ORDER BY occurrence_count DESC, fault.fault_family ASC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_historical_actions(limit=50):
+    safe_limit = max(1, min(int(limit), 200))
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                record_key,
+                COALESCE(priority, 'Unspecified') AS priority,
+                machine,
+                department,
+                fault_family,
+                action_text,
+                owner_role,
+                COALESCE(status, 'Open') AS status,
+                target_date,
+                confidence_level
+            FROM historical_action_plan
+            WHERE action_required = 1
+            ORDER BY
+                CASE LOWER(COALESCE(priority, ''))
+                    WHEN 'critical' THEN 1
+                    WHEN 'high' THEN 2
+                    WHEN 'medium' THEN 3
+                    WHEN 'low' THEN 4
+                    ELSE 5
+                END,
+                target_date ASC,
+                id ASC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_historical_sources(limit=50):
+    safe_limit = max(1, min(int(limit), 200))
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                source.id,
+                source.source_key,
+                source.source_file,
+                source.source_type,
+                source.title,
+                source.report_date,
+                source.site,
+                source.imported_at,
+                source.updated_at,
+                COUNT(report.id) AS report_count
+            FROM historical_sources AS source
+            LEFT JOIN historical_reports AS report ON report.source_id = source.id
+            GROUP BY source.id
+            ORDER BY source.updated_at DESC, source.id DESC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_historical_summary():
+    machines = get_historical_machines()
+    faults = get_historical_faults()
+    actions = get_historical_actions()
+
+    with get_connection() as conn:
+        total_events = conn.execute(
+            "SELECT COALESCE(SUM(event_count), 0) FROM historical_events"
+        ).fetchone()[0]
+        machines_covered = conn.execute(
+            """
+            SELECT COUNT(DISTINCT machine_key)
+            FROM historical_machine_metrics
+            WHERE machine_key IS NOT NULL AND machine_key != ''
+            """
+        ).fetchone()[0]
+        coverage = conn.execute(
+            """
+            SELECT
+                MIN(period_start) AS period_start,
+                MAX(period_end) AS period_end,
+                COUNT(*) AS report_count
+            FROM historical_reports
+            """
+        ).fetchone()
+        source_count = conn.execute(
+            "SELECT COUNT(*) FROM historical_sources"
+        ).fetchone()[0]
+
+    top_recurring = machines[0] if machines else None
+    top_downtime = (
+        max(machines, key=lambda row: row["downtime_count"]) if machines else None
+    )
+    top_quality = (
+        max(machines, key=lambda row: row["quality_risk_count"]) if machines else None
+    )
+    return {
+        "available": bool(total_events or machines or faults),
+        "label": "Historical managerial baseline, not raw live WhatsApp messages.",
+        "metrics": {
+            "total_events": total_events,
+            "machines_covered": machines_covered,
+            "top_recurring_machine": top_recurring,
+            "top_downtime_machine": top_downtime,
+            "top_quality_machine": top_quality,
+        },
+        "coverage": {
+            "period_start": coverage["period_start"] if coverage else None,
+            "period_end": coverage["period_end"] if coverage else None,
+            "report_count": coverage["report_count"] if coverage else 0,
+            "source_count": source_count,
+        },
+        "machines": machines,
+        "faults": faults,
+        "actions": actions,
+    }
+
+
+def get_historical_admin_data():
+    with get_connection() as conn:
+        counts = {
+            table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in HISTORICAL_TABLES
+        }
+        reports = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT
+                    report.report_key,
+                    report.title,
+                    report.report_type,
+                    report.period_start,
+                    report.period_end,
+                    report.site,
+                    report.confidence_level,
+                    source.source_file
+                FROM historical_reports AS report
+                JOIN historical_sources AS source ON source.id = report.source_id
+                ORDER BY report.updated_at DESC, report.id DESC
+                LIMIT 50
+                """
+            ).fetchall()
+        ]
+        import_runs = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT *
+                FROM historical_import_runs
+                ORDER BY started_at DESC, id DESC
+                LIMIT 20
+                """
+            ).fetchall()
+        ]
+    return {
+        "counts": counts,
+        "sources": get_historical_sources(),
+        "reports": reports,
+        "import_runs": import_runs,
+        "last_import": import_runs[0] if import_runs else None,
+    }

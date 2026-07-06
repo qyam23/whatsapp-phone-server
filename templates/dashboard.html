@@ -228,8 +228,144 @@
         </article>
       </section>
 
+      <section class="historical-section" id="historical-baseline">
+        <div class="historical-heading">
+          <div>
+            <p class="section-kicker">Historical operations evidence</p>
+            <h2>Historical Baseline - Mor / McGuyver</h2>
+            <p>{{ historical.label }}</p>
+          </div>
+          {% if historical.available %}
+          <span class="data-badge">
+            {{ historical.coverage.period_start or "Unknown" }} to {{ historical.coverage.period_end or "Unknown" }}
+          </span>
+          {% endif %}
+        </div>
+
+        {% if historical.available %}
+        <section class="kpi-grid historical-kpis" aria-label="Historical baseline indicators">
+          <article class="kpi-card">
+            <div class="kpi-heading"><span>Historical events</span><span class="kpi-code">BASE</span></div>
+            <strong>{{ historical.metrics.total_events }}</strong>
+            <p>Prepared baseline records</p>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-heading"><span>Machines covered</span><span class="kpi-code">MCH</span></div>
+            <strong>{{ historical.metrics.machines_covered }}</strong>
+            <p>Named machine summaries</p>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-heading"><span>Top recurring</span><span class="kpi-code">REC</span></div>
+            <strong class="historical-name" dir="auto">{{ historical.metrics.top_recurring_machine.machine if historical.metrics.top_recurring_machine else "No data" }}</strong>
+            <p>{{ historical.metrics.top_recurring_machine.event_count if historical.metrics.top_recurring_machine else 0 }} events</p>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-heading"><span>Top downtime</span><span class="kpi-code">DWN</span></div>
+            <strong class="historical-name" dir="auto">{{ historical.metrics.top_downtime_machine.machine if historical.metrics.top_downtime_machine else "No data" }}</strong>
+            <p>{{ historical.metrics.top_downtime_machine.downtime_count if historical.metrics.top_downtime_machine else 0 }} flagged records</p>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-heading"><span>Top quality risk</span><span class="kpi-code">QLT</span></div>
+            <strong class="historical-name" dir="auto">{{ historical.metrics.top_quality_machine.machine if historical.metrics.top_quality_machine else "No data" }}</strong>
+            <p>{{ historical.metrics.top_quality_machine.quality_risk_count if historical.metrics.top_quality_machine else 0 }} risk records</p>
+          </article>
+        </section>
+
+        <section class="data-panel historical-machine-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Machine Baseline Ranking</h3>
+              <p>Prepared event, downtime, quality-risk and recurrence evidence</p>
+            </div>
+            <a href="/api/historical/machines">JSON</a>
+          </div>
+          {% set historical_machine_max = [historical.machines[0].event_count, 1] | max if historical.machines else 1 %}
+          <div class="table-wrap">
+            <table class="historical-table">
+              <thead>
+                <tr><th>Machine</th><th>Events</th><th>Downtime</th><th>Quality risk</th><th>Recurrence</th><th>Severity</th></tr>
+              </thead>
+              <tbody>
+                {% for machine in historical.machines %}
+                <tr>
+                  <td class="historical-machine-cell">
+                    <strong dir="auto">{{ machine.machine }}</strong>
+                    <span>{{ machine.department }}</span>
+                    <div class="bar-track alert"><span style="width: {{ (machine.event_count / historical_machine_max * 100) | round }}%"></span></div>
+                  </td>
+                  <td><strong>{{ machine.event_count }}</strong></td>
+                  <td>{{ machine.downtime_count }}</td>
+                  <td>{{ machine.quality_risk_count }}</td>
+                  <td>{{ "%.1f" | format(machine.recurrence_score) }}</td>
+                  <td><span class="severity-label severity-{{ machine.severity }}">{{ machine.severity }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="dashboard-grid historical-detail-grid">
+          <article class="data-panel">
+            <div class="panel-heading">
+              <div><h3>Fault-Family Summary</h3><p>Occurrence and machine coverage from prepared evidence</p></div>
+              <a href="/api/historical/faults">JSON</a>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Fault family</th><th>Occurrences</th><th>Machines</th><th>Severity</th></tr></thead>
+                <tbody>
+                  {% for fault in historical.faults %}
+                  <tr>
+                    <td><strong dir="auto">{{ fault.fault_family }}</strong></td>
+                    <td>{{ fault.occurrence_count }}</td>
+                    <td>{{ fault.machines_affected }}</td>
+                    <td><span class="severity-label severity-{{ fault.severity }}">{{ fault.severity }}</span></td>
+                  </tr>
+                  {% else %}
+                  <tr><td colspan="4">No fault-family baseline is available.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="data-panel">
+            <div class="panel-heading">
+              <div><h3>Historical Action Plan</h3><p>Imported management actions and ownership</p></div>
+              <a href="/api/historical/actions">JSON</a>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Priority</th><th>Machine</th><th>Fault</th><th>Action</th><th>Owner</th><th>Status</th></tr></thead>
+                <tbody>
+                  {% for action in historical.actions %}
+                  <tr>
+                    <td>{{ action.priority }}</td>
+                    <td dir="auto">{{ action.machine or "General" }}</td>
+                    <td dir="auto">{{ action.fault_family or "General" }}</td>
+                    <td class="clip" dir="auto">{{ action.action_text }}</td>
+                    <td dir="auto">{{ action.owner_role or "Unassigned" }}</td>
+                    <td>{{ action.status }}</td>
+                  </tr>
+                  {% else %}
+                  <tr><td colspan="6">No historical action-plan records were included in this seed.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+        {% else %}
+        <section class="notice info-notice">
+          <strong>No historical baseline imported yet.</strong>
+        </section>
+        {% endif %}
+      </section>
+
       <footer class="dashboard-footer">
-        <span>Source: SQLite message archive</span>
+        <span>Live source: SQLite message archive</span>
+        <span>Baseline source: prepared Mor / McGuyver seed</span>
         <span>Latest message: {{ dashboard.last_message_at or "No records" }}</span>
         <span>Automatic refresh: every 12 hours</span>
       </footer>
