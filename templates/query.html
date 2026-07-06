@@ -41,9 +41,12 @@
           <h2>Ask the production database</h2>
           <p>Questions are translated into approved read-only tools. The model cannot execute SQL.</p>
         </div>
-        <span class="ai-status {{ 'ready' if ai_configured else 'offline' }}">
-          {{ "AI ready" if ai_configured else "API key required" }}
-        </span>
+        <div class="query-heading-actions">
+          <a class="clear-view-action" href="/query" title="Remove the current question and answer from this view">Clear view</a>
+          <span class="ai-status {{ 'ready' if ai_configured else 'offline' }}">
+            {{ "AI ready" if ai_configured else "API key required" }}
+          </span>
+        </div>
       </section>
 
       {% if not ai_configured %}

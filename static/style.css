@@ -337,6 +337,30 @@ button:disabled {
   color: var(--muted);
 }
 
+.query-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clear-view-action {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 7px 9px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.clear-view-action:hover {
+  border-color: #d2a3a3;
+  background: #fff5f5;
+  color: #8d2929;
+}
+
 .ai-status {
   border: 1px solid var(--line);
   border-radius: 3px;

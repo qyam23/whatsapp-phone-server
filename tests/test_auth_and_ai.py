@@ -180,6 +180,38 @@ class AuthAndAIQueryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), expected)
 
+    def test_clear_view_removes_current_ai_result_without_deleting_audit(self):
+        self._login()
+        os.environ["OPENAI_API_KEY"] = "test-key"
+        expected = {
+            "answer": "Production is stable.",
+            "tools_used": [],
+            "model": "test-model",
+        }
+        with patch.object(query, "ask_database", return_value=expected):
+            response = self.client.post(
+                "/query",
+                data={
+                    "csrf_token": self._csrf(),
+                    "question": "Show the current production status",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Clear view", response.data)
+        self.assertIn(b"Production is stable.", response.data)
+
+        cleared = self.client.get("/query")
+        self.assertEqual(cleared.status_code, 200)
+        self.assertIn(b"Clear view", cleared.data)
+        self.assertNotIn(b"Production is stable.", cleared.data)
+
+        with db.get_connection() as connection:
+            audit_count = connection.execute(
+                "SELECT COUNT(*) FROM query_audit"
+            ).fetchone()[0]
+        self.assertEqual(audit_count, 1)
+
     def test_readonly_connection_rejects_writes(self):
         with db.get_readonly_connection() as connection:
             with self.assertRaises(sqlite3.OperationalError):
