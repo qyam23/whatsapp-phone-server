@@ -46,6 +46,7 @@
           <p>Review and filter the original stored records.</p>
         </div>
         <div class="admin-actions">
+          <button class="secondary-button" id="clear-message-view" type="button">Clear view</button>
           <a href="/api/messages{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">JSON</a>
           <a class="primary-action" href="/export/messages.csv{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Export CSV</a>
         </div>
@@ -107,7 +108,7 @@
         <div class="table-wrap">
           <table>
             <thead><tr><th>ID</th><th>Source</th><th>Group or chat</th><th>Timestamp</th><th>Sender</th><th>Phone</th><th>Type</th><th>Message</th><th>Media</th><th>Status</th></tr></thead>
-            <tbody>
+            <tbody id="messages-table-body">
               {% for message in messages %}
               <tr>
                 <td>{{ message.id }}</td>
@@ -126,8 +127,14 @@
               {% endfor %}
             </tbody>
           </table>
+          <div class="view-cleared-state" id="messages-cleared-state" hidden>
+            <strong>Message view cleared.</strong>
+            <span>The database was not changed.</span>
+            <a href="/messages{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Restore view</a>
+          </div>
         </div>
       </section>
     </main>
+    <script src="/static/messages.js"></script>
   </body>
 </html>

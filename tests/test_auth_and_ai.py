@@ -71,6 +71,7 @@ class AuthAndAIQueryTests(unittest.TestCase):
         for route in routes:
             with self.subTest(route=route):
                 self.assertEqual(self.client.get(route).status_code, 200)
+        self.assertIn(b"Clear view", self.client.get("/messages").data)
 
     def test_administration_write_is_open_but_keeps_csrf_protection(self):
         self.client.get("/administration")

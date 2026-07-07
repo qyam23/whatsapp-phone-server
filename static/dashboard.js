@@ -6,9 +6,17 @@
   if (!dataElement || !chart) return;
 
   const data = JSON.parse(dataElement.textContent || "{}");
-  const labels = data.labels || [];
+  const fallbackLabels = data.labels || [];
+  const currentBucketStarts = data.current_bucket_starts || [];
+  const currentBucketEnds = data.current_bucket_ends || [];
+  const previousBucketStarts = data.previous_bucket_starts || [];
+  const previousBucketEnds = data.previous_bucket_ends || [];
   const current = data.current || [];
   const previous = data.previous || [];
+  const isHourly = currentBucketStarts.length <= 12;
+  const labels = currentBucketEnds.length
+    ? currentBucketEnds.map((value) => formatAxisLabel(value, isHourly))
+    : fallbackLabels;
   const width = 900;
   const height = 270;
   const margin = { top: 14, right: 18, bottom: 38, left: 42 };
@@ -27,6 +35,20 @@
     if (text !== undefined) node.textContent = text;
     chart.appendChild(node);
     return node;
+  }
+
+  function formatAxisLabel(value, hourly) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value || "";
+    if (hourly) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return date.toLocaleDateString([], { day: "2-digit", month: "short" });
+  }
+
+  function formatRange(start, end) {
+    if (!start || !end) return "";
+    return `${formatAxisLabel(start, isHourly)}-${formatAxisLabel(end, isHourly)}`;
   }
 
   function x(index) {
@@ -81,7 +103,8 @@
         class: "chart-point"
       });
       const title = document.createElementNS(ns, "title");
-      title.textContent = `${labels[index]}: ${value} messages`;
+      const range = formatRange(currentBucketStarts[index], currentBucketEnds[index]);
+      title.textContent = `${range || labels[index]}: ${value} messages`;
       point.appendChild(title);
     });
   }

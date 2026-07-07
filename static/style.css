@@ -1307,6 +1307,33 @@ button:disabled {
   overflow-x: auto;
 }
 
+.view-cleared-state {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 160px;
+  border: 1px dashed #c7d1cb;
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: var(--muted);
+  margin-top: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.view-cleared-state[hidden] {
+  display: none;
+}
+
+.view-cleared-state strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.view-cleared-state a {
+  margin-top: 4px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

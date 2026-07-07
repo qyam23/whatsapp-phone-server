@@ -71,6 +71,13 @@ class ManagementDashboardTests(unittest.TestCase):
         self.assertEqual(last_12_hours["metrics"]["messages"], direct_12_hour_count)
         self.assertEqual(sum(last_12_hours["trend"]["current"]), 6)
         self.assertEqual(sum(last_12_hours["trend"]["previous"]), 2)
+        self.assertEqual(len(last_12_hours["trend"]["current_bucket_starts"]), 12)
+        self.assertEqual(len(last_12_hours["trend"]["current_bucket_ends"]), 12)
+        self.assertEqual(
+            last_12_hours["trend"]["current_bucket_ends"][-1],
+            NOW.isoformat(timespec="seconds"),
+        )
+        self.assertEqual(last_12_hours["trend"]["labels"][-1], "12:00")
         self.assertEqual(last_7_days["metrics"]["messages"], 9)
         self.assertEqual(last_30_days["metrics"]["messages"], 10)
 

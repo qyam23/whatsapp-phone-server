@@ -716,10 +716,19 @@ def _series(rows, start, duration, buckets):
             counts[index] += 1
 
     labels = []
+    bucket_starts = []
+    bucket_ends = []
     for index in range(buckets):
         point = start + timedelta(seconds=bucket_seconds * index)
-        labels.append(point.strftime("%H:%M") if duration <= timedelta(hours=12) else point.strftime("%d %b"))
-    return labels, counts
+        bucket_end = point + timedelta(seconds=bucket_seconds)
+        bucket_starts.append(point.isoformat(timespec="seconds"))
+        bucket_ends.append(bucket_end.isoformat(timespec="seconds"))
+        labels.append(
+            bucket_end.strftime("%H:%M")
+            if duration <= timedelta(hours=12)
+            else bucket_end.strftime("%d %b")
+        )
+    return labels, counts, bucket_starts, bucket_ends
 
 
 def _keyword_list(value):
@@ -856,10 +865,10 @@ def get_management_dashboard(period="12h", now=None):
         if current >= previous
     ]
     average_gap = sum(gaps) / len(gaps) if gaps else None
-    labels, current_series = _series(
+    labels, current_series, current_bucket_starts, current_bucket_ends = _series(
         current_rows, start, config["duration"], config["buckets"]
     )
-    _, previous_series = _series(
+    _, previous_series, previous_bucket_starts, previous_bucket_ends = _series(
         previous_rows, previous_start, config["duration"], config["buckets"]
     )
 
@@ -917,6 +926,10 @@ def get_management_dashboard(period="12h", now=None):
             "labels": labels,
             "current": current_series,
             "previous": previous_series,
+            "current_bucket_starts": current_bucket_starts,
+            "current_bucket_ends": current_bucket_ends,
+            "previous_bucket_starts": previous_bucket_starts,
+            "previous_bucket_ends": previous_bucket_ends,
         },
         "top_senders": sender_ranking,
         "top_groups": group_ranking,
